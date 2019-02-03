@@ -6,9 +6,9 @@
 
 using namespace Rcpp;
 
-// kf
-Rcpp::List kf(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At, arma::mat Ft, arma::mat Ht, arma::mat Qt, arma::mat Rt, arma::mat yt);
-RcppExport SEXP _TCSDecomp_kf(SEXP B0SEXP, SEXP P0SEXP, SEXP DtSEXP, SEXP AtSEXP, SEXP FtSEXP, SEXP HtSEXP, SEXP QtSEXP, SEXP RtSEXP, SEXP ytSEXP) {
+// kalman_filter
+Rcpp::List kalman_filter(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At, arma::mat Ft, arma::mat Ht, arma::mat Qt, arma::mat Rt, arma::mat yt);
+RcppExport SEXP _TCSDecomp_kalman_filter(SEXP B0SEXP, SEXP P0SEXP, SEXP DtSEXP, SEXP AtSEXP, SEXP FtSEXP, SEXP HtSEXP, SEXP QtSEXP, SEXP RtSEXP, SEXP ytSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -21,13 +21,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat >::type Qt(QtSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type Rt(RtSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type yt(ytSEXP);
-    rcpp_result_gen = Rcpp::wrap(kf(B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt));
+    rcpp_result_gen = Rcpp::wrap(kalman_filter(B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt));
     return rcpp_result_gen;
 END_RCPP
 }
-// kf_smoother
-Rcpp::List kf_smoother(arma::mat B_TL, arma::mat B_TT, arma::cube P_TL, arma::cube P_TT, arma::mat Ft);
-RcppExport SEXP _TCSDecomp_kf_smoother(SEXP B_TLSEXP, SEXP B_TTSEXP, SEXP P_TLSEXP, SEXP P_TTSEXP, SEXP FtSEXP) {
+// kalman_smoother
+Rcpp::List kalman_smoother(arma::mat B_TL, arma::mat B_TT, arma::cube P_TL, arma::cube P_TT, arma::mat Ft);
+RcppExport SEXP _TCSDecomp_kalman_smoother(SEXP B_TLSEXP, SEXP B_TTSEXP, SEXP P_TLSEXP, SEXP P_TTSEXP, SEXP FtSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -36,7 +36,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::cube >::type P_TL(P_TLSEXP);
     Rcpp::traits::input_parameter< arma::cube >::type P_TT(P_TTSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type Ft(FtSEXP);
-    rcpp_result_gen = Rcpp::wrap(kf_smoother(B_TL, B_TT, P_TL, P_TT, Ft));
+    rcpp_result_gen = Rcpp::wrap(kalman_smoother(B_TL, B_TT, P_TL, P_TT, Ft));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -85,8 +85,8 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_TCSDecomp_kf", (DL_FUNC) &_TCSDecomp_kf, 9},
-    {"_TCSDecomp_kf_smoother", (DL_FUNC) &_TCSDecomp_kf_smoother, 5},
+    {"_TCSDecomp_kalman_filter", (DL_FUNC) &_TCSDecomp_kalman_filter, 9},
+    {"_TCSDecomp_kalman_smoother", (DL_FUNC) &_TCSDecomp_kalman_smoother, 5},
     {"_TCSDecomp_rcpparma_hello_world", (DL_FUNC) &_TCSDecomp_rcpparma_hello_world, 0},
     {"_TCSDecomp_rcpparma_outerproduct", (DL_FUNC) &_TCSDecomp_rcpparma_outerproduct, 1},
     {"_TCSDecomp_rcpparma_innerproduct", (DL_FUNC) &_TCSDecomp_rcpparma_innerproduct, 1},

@@ -41,7 +41,7 @@
 // }
 
 // [[Rcpp::export]]
-Rcpp::List kf(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At,
+Rcpp::List kalman_filter(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At,
               arma::mat Ft, arma::mat Ht, arma::mat Qt, arma::mat Rt,
               arma::mat yt){
 
@@ -53,7 +53,9 @@ Rcpp::List kf(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At,
   arma::mat N_T(yt.n_rows, yt.n_cols);
   arma::cube F_T(yt.n_rows, yt.n_rows, yt.n_cols);
   arma::cube K_T(Ft.n_rows, yt.n_rows, yt.n_cols);
-
+  arma::uvec nonna_idx;
+  arma::uvec na_idx;
+  
   //Initialize the filter
   arma::mat B_LL = B0;
   arma::mat P_LL = P0;
@@ -64,6 +66,14 @@ Rcpp::List kf(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At,
     B_TL.col(i) = Dt + Ft * B_LL; //Initial estimate of unobserved values conditional on t-1
     P_TL.slice(i) = Ft * P_LL * Ft.t() + Qt; //Initial estimate of the covariance matrix conditional on t-1
     N_T.col(i) = yt.col(i) - At - Ht * B_TL.col(i); //Prediction error conditoinal on t-1
+    nonna_idx = arma::find_finite(N_T.col(i));
+    na_idx = arma::find_nonfinite(N_T.col(i));
+    if(!na_idx.is_empty()){
+      arma::uvec cols;
+      cols = i;
+      N_T(na_idx, cols) = arma::vec(na_idx.n_elem, arma::fill::zeros);
+    }
+    
     F_T.slice(i) = Ht * P_TL.slice(i) * Ht.t() + Rt; //Variance of the predictoin error conditional on t-1
     K_T.slice(i) = P_TL.slice(i) * Ht.t() * inv(F_T.slice(i)); //Kalman gain conditional on t-1
     B_TT.col(i) = B_TL.col(i) + K_T.slice(i) * N_T.col(i); //Final estimate of the unobserved values
@@ -86,7 +96,7 @@ Rcpp::List kf(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At,
 }
 
 // [[Rcpp::export]]
-Rcpp::List kf_smoother(arma::mat B_TL, arma::mat B_TT, arma::cube P_TL, arma::cube P_TT, arma::mat Ft){
+Rcpp::List kalman_smoother(arma::mat B_TL, arma::mat B_TT, arma::cube P_TL, arma::cube P_TT, arma::mat Ft){
   int t = B_TT.n_cols - 1;
   arma::mat Ptt_x_Ft_x_PtInv = P_TT.slice(t - 1) * Ft.t() * pinv(P_TL.slice(t));
 

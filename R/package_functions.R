@@ -181,10 +181,10 @@ SSmodel = function(par, yt, freq, decomp, int_order, trend, init = NULL){
 #' @param maxtrials Maximum number of optimization trials to get convergence
 #' @return List of estimation values including coefficients, convergence code, datea frequency, decomposition used, and trend specification selected.
 #' @examples
-#' kf_decomp_estim(y = DT[, c("date", "y")])
+#' tcs_decomp_estim(y = DT[, c("date", "y")])
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-kf_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
+tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
                            blend = F, level = 0.01, ur_test = "adf", ur_type = "level",
                            optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
   dates = NULL
@@ -240,7 +240,7 @@ kf_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
   #Set the decomposition
   if(is.null(decomp)){
     #Calculate a periodogram for the data
-    pgram = TSA::periodogram(y, plot = F)
+    pgram = TSA::periodogram(imputeTS::na.kalman(y), plot = F)
     pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
     pgram[, "d" := (spec)/mean(spec, na.rm = T)]
     pgram = pgram[period < length(y), ]
@@ -274,14 +274,6 @@ kf_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
     rm(pgram_base, periods)
   }
   
-  objective = function(par, yt, freq, decomp, int_order, trend, init = NULL){
-    yt = matrix(yt, nrow = 1)
-    sp = SSmodel(par, yt, freq, decomp, int_order, trend)
-    ans = kf(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
-    #maxLik maximes the log likelihood, optim minizes the log likelihood
-    return(ans$loglik)#return(-ans$logLik)
-  }
-  
   #Define the trend specifications to estiamte
   if(is.null(int_order)){
     int_order = as.character(forecast::ndiffs(y, alpha = level, test = ur_test, type = ur_type))
@@ -308,23 +300,23 @@ kf_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
   doSNOW::registerDoSNOW(cl)
   invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
   `%fun%` = foreach::`%dopar%`
-  fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik"), .export = c("SSmodel")) %fun% {
+  fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
     #Set up the initial values
     if(gsub("rw|hp", "", i) == "0"){
-      par = forecast::auto.arima(y, d = 0, max.q = 0, allowdrift = F)
+      par = forecast::auto.arima(imputeTS::na.kalman(y), d = 0, max.q = 0, allowdrift = F)
       if(sum(coef(par)[!grepl("sar", names(coef(par)))]) < 1){
         par = c(phi = unname(coef(par)[!grepl("sar", names(coef(par)))]))
       }else{
         par = c(phi = rep(0.5/length(coef(par)[!grepl("sar", names(coef(par)))]), length(coef(par)[!grepl("sar", names(coef(par)))])))
       }
-      par = c(par, sig_t = sqrt(var(y)*(1 - sum(par^2))/(2 - sum(par)^2)))
+      par = c(par, sig_t = sqrt(var(y, na.rm = T)*(1 - sum(par^2))/(2 - sum(par)^2)))
       if(is.na(par["sig_t"])){
-        par["sig_t"] = sqrt(1/2*var(y))
+        par["sig_t"] = sqrt(1/2*var(y, na.rm = T))
       }
     }else if(gsub("rw|hp", "", i) == "1"){
-      par = c(sig_t = sqrt(1/3*var(diff(y))))
+      par = c(sig_t = sqrt(1/3*var(diff(y), na.rm = T)))
     }else if(gsub("rw|hp", "", i) == "2"){
-      par = c(sig_t = sqrt(1/7*var(diff(diff(y)))))
+      par = c(sig_t = sqrt(1/7*var(diff(diff(y)), na.rm = T)))
       if(i == "2rw"){
         par = c(par, sig_m = unname(par["sig_t"]))
       }
@@ -347,24 +339,44 @@ kf_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
       par = c(par, sig_e = unname(par["sig_t"]))
     }
     
+    objective = function(par, na_locs, freq, decomp, int_order, trend, init = NULL){
+      yt = matrix(get("y"), nrow = 1)
+      sp = SSmodel(par, yt, freq, decomp, int_order, trend)
+      ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
+      if(!is.null(na_locs)){
+        # ans = kalman_smoother(B_TL = ans$B_TL, B_TT = ans$B_TT, P_TL = ans$P_TL, P_TT = ans$P_TT, Ft = sp$Ft)
+        fc = sp$Ht %*% ans$B_TT
+        yt[, na_locs] = fc[, na_locs]
+        ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt,  yt = yt)
+        assign("y", c(yt), .GlobalEnv)
+      }
+      #maxLik maximes the log likelihood, optim minizes the log likelihood
+      return(ans$loglik)#return(-ans$logLik)
+    }
+    
     #Get initial values for Kalman Filter
     sp = SSmodel(par, y, freq, decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i))
-    init = kf(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
-    init = kf_smoother(B_TL = init[["B_TL"]], B_TT = init[["B_TT"]], P_TL = init[["P_TL"]], P_TT = init[["P_TT"]], Ft = sp$Ft)
+    init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    init = kalman_smoother(B_TL = init[["B_TL"]], B_TT = init[["B_TT"]], P_TL = init[["P_TL"]], P_TT = init[["P_TT"]], Ft = sp$Ft)
     init = list(B0 = init[["B_TT"]][, 1], P0 = init[["P_TT"]][, , 1])
     
     #Estimate the model
+    if(any(is.na(y))){
+      na_locs = which(is.na(y))
+    }else{
+      na_locs = NULL
+    }
     out = tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[1],
                                   finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
-                                  yt = y, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
+                                  na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                    error = function(err){
                      tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(2, length(optim_methods)))],
                                              finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
-                                             yt = y, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
+                                             na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                               error = function(err){
                                 tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))],
                                                         finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
-                                                        yt = y, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
+                                                        na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                                          error = function(err){NULL})
                               })
                    })
@@ -375,15 +387,15 @@ kf_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
       while(out$code != 0 & trials < maxtrials){
         out2 = tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[1],
                                        finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
-                                       yt = y, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
+                                       na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                         error = function(err){
                           tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(2, length(optim_methods)))],
                                                   finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
-                                                  yt = y, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
+                                                  na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                                    error = function(err){
                                      tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(3, length(optim_methods)))],
                                                              finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
-                                                             yt = y, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
+                                                             na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                                               error = function(err){NULL})
                                    })
                         })
@@ -418,7 +430,7 @@ kf_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
       cs = cs[!is.na(cs)]
       names(cs) = gsub("coef_", "", names(cs))
       sp = SSmodel(cs, y, freq, decomp, int_order = gsub("rw|hp", "", x), trend = gsub("[[:digit:]]", "", x))
-      ans = kf(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+      ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
       rownames(ans$B_TT) = rownames(sp$Ft)
       return(t(sp$Ht %*% ans$B_TT))
     }))
@@ -450,17 +462,17 @@ kf_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
   return(fit)
 }
 
-#' Kalman filter an estimated model from kf_decomp_estim
+#' Kalman filter an estimated model from tcs_decomp_estim
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
-#' @param model Structural time series model estimated using kf_decomp_estim.
+#' @param model Structural time series model estimated using tcs_decomp_estim.
 #' @param plot Logial, whether to plot the output or not.
 #' @param select If NULL, then use the model selected by kf_dceomp_estim; otherwise, use the one specified with select
 #' @return List of data tables containing the filtered and smoothed series.
 #' @examples
-#' kf_decomp_filter(y = DT[, c("date", "y")], model = model)
+#' tcs_decomp_filter(y = DT[, c("date", "y")], model = model)
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-kf_decomp_filter = function(y, model, plot = F, select = NULL){
+tcs_decomp_filter = function(y, model, plot = F, select = NULL){
   y = data.table::as.data.table(y)
   `.SD` = data.table::.SD
   if(any(unlist(y[, lapply(.SD, function(x){class(x) == "Date"})]))){
@@ -479,6 +491,12 @@ kf_decomp_filter = function(y, model, plot = F, select = NULL){
   #Set the dates if it hasn't been given
   if(is.null(dates)){
     dates = 1:length(y)
+  }
+  
+  if(any(is.na(y))){
+    na_locs = which(is.na(y))
+  }else{
+    na_locs = NULL
   }
   
   #Get the filtered and smoothed series
@@ -503,13 +521,18 @@ kf_decomp_filter = function(y, model, plot = F, select = NULL){
     names(cs) = gsub("coef_", "", names(cs))
     
     sp = SSmodel(cs, y, freq, decomp, int_order = gsub("rw|hp", "", n), trend = gsub("[[:digit:]]", "", n))
-    init = kf(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
-    init = kf_smoother(B_TL = init$B_TL, B_TT = init$B_TT, P_TL = init$P_TL, P_TT = init$P_TT, Ft = sp$Ft)
+    init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    init = kalman_smoother(B_TL = init$B_TL, B_TT = init$B_TT, P_TL = init$P_TL, P_TT = init$P_TT, Ft = sp$Ft)
     init = list(B0 = init[["B_TT"]][, 1], P0 = init[["P_TT"]][, , 1])
     sp = SSmodel(cs, y, freq, decomp, int_order = gsub("rw|hp", "", n), trend = gsub("[[:digit:]]", "", n), init = init)
-    ans = kf(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    if(!is.null(na_locs)){
+      fc = sp$Ht %*% ans$B_TT
+      y[na_locs] = fc[, na_locs]
+      ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    }
     rownames(ans$B_TT) = rownames(sp$Ft)
-    smooth = kf_smoother(B_TL = ans$B_TL, B_TT = ans$B_TT, P_TL = ans$P_TL, P_TT = ans$P_TT, Ft = sp$Ft)[["B_TT"]]
+    smooth = kalman_smoother(B_TL = ans$B_TL, B_TT = ans$B_TT, P_TL = ans$P_TL, P_TT = ans$P_TT, Ft = sp$Ft)[["B_TT"]]
     rownames(smooth) = rownames(ans$B_TT)
     
     iter = c("filter", "smooth")
