@@ -344,8 +344,8 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
       sp = SSmodel(par, yt, freq, decomp, int_order, trend)
       ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
       if(!is.null(na_locs)){
-        # ans = kalman_smoother(B_TL = ans$B_TL, B_TT = ans$B_TT, P_TL = ans$P_TL, P_TT = ans$P_TT, Ft = sp$Ft)
-        fc = sp$Ht %*% ans$B_TT
+        # ans = kalman_smoother(B_tl = ans$B_tl, B_tt = ans$B_tt, P_tl = ans$P_tl, P_tt = ans$P_tt, Ft = sp$Ft)
+        fc = sp$Ht %*% ans$B_tt
         yt[, na_locs] = fc[, na_locs]
         ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt,  yt = yt)
         assign("y", c(yt), .GlobalEnv)
@@ -357,8 +357,8 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
     #Get initial values for Kalman Filter
     sp = SSmodel(par, y, freq, decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i))
     init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
-    init = kalman_smoother(B_TL = init[["B_TL"]], B_TT = init[["B_TT"]], P_TL = init[["P_TL"]], P_TT = init[["P_TT"]], Ft = sp$Ft)
-    init = list(B0 = init[["B_TT"]][, 1], P0 = init[["P_TT"]][, , 1])
+    init = kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft)
+    init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
     
     #Estimate the model
     if(any(is.na(y))){
@@ -431,8 +431,8 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
       names(cs) = gsub("coef_", "", names(cs))
       sp = SSmodel(cs, y, freq, decomp, int_order = gsub("rw|hp", "", x), trend = gsub("[[:digit:]]", "", x))
       ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
-      rownames(ans$B_TT) = rownames(sp$Ft)
-      return(t(sp$Ht %*% ans$B_TT))
+      rownames(ans$B_tt) = rownames(sp$Ft)
+      return(t(sp$Ht %*% ans$B_tt))
     }))
     colnames(test) = names(fit)
     
@@ -522,44 +522,44 @@ tcs_decomp_filter = function(y, model, plot = F, select = NULL){
     
     sp = SSmodel(cs, y, freq, decomp, int_order = gsub("rw|hp", "", n), trend = gsub("[[:digit:]]", "", n))
     init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
-    init = kalman_smoother(B_TL = init$B_TL, B_TT = init$B_TT, P_TL = init$P_TL, P_TT = init$P_TT, Ft = sp$Ft)
-    init = list(B0 = init[["B_TT"]][, 1], P0 = init[["P_TT"]][, , 1])
+    init = kalman_smoother(B_tl = init$B_tl, B_tt = init$B_tt, P_tl = init$P_tl, P_tt = init$P_tt, Ft = sp$Ft)
+    init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
     sp = SSmodel(cs, y, freq, decomp, int_order = gsub("rw|hp", "", n), trend = gsub("[[:digit:]]", "", n), init = init)
     ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
     if(!is.null(na_locs)){
-      fc = sp$Ht %*% ans$B_TT
+      fc = sp$Ht %*% ans$B_tt
       y[na_locs] = fc[, na_locs]
       ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
     }
-    rownames(ans$B_TT) = rownames(sp$Ft)
-    smooth = kalman_smoother(B_TL = ans$B_TL, B_TT = ans$B_TT, P_TL = ans$P_TL, P_TT = ans$P_TT, Ft = sp$Ft)[["B_TT"]]
-    rownames(smooth) = rownames(ans$B_TT)
+    rownames(ans$B_tt) = rownames(sp$Ft)
+    smooth = kalman_smoother(B_tl = ans$B_tl, B_tt = ans$B_tt, P_tl = ans$P_tl, P_tt = ans$P_tt, Ft = sp$Ft)[["B_tt"]]
+    rownames(smooth) = rownames(ans$B_tt)
     
     iter = c("filter", "smooth")
     `%fun2%` = foreach::`%dopar%`
     preret = foreach::foreach(i = iter, .packages = c("data.table")) %fun2% {
       if(i == "filter"){
-        B_TT = ans$B_TT
+        B_tt = ans$B_tt
       }else if(i == "smooth"){
-        B_TT = smooth
+        B_tt = smooth
       }
-      series = data.table::data.table(t(B_TT))
+      series = data.table::data.table(t(B_tt))
       series.l = copy(series)
       series.l[, colnames(series.l) := lapply(.SD, shift, type = "lag", n = 1), .SDcols = colnames(series.l)]
       
       #Calculate the seriesed and error series
       errors = t(as.matrix(series)) - sp$Ft %*% t(as.matrix(series.l))
-      trend = c(sp$Ht[grepl("Tt|Mt", colnames(sp$Ht))] %*% B_TT[which(grepl("Tt|Mt", rownames(B_TT))), ])
+      trend = c(sp$Ht[grepl("Tt|Mt", colnames(sp$Ht))] %*% B_tt[which(grepl("Tt|Mt", rownames(B_tt))), ])
       trend_error = c(sp$Ht[grepl("Tt|Mt", colnames(sp$Ht))] %*% errors[grepl("Tt|Mt", rownames(errors)), ])
       if(any(grepl("Ct", rownames(errors)))){
-        cycle = c(sp$Ht[grepl("Ct", colnames(sp$Ht))] %*% B_TT[which(grepl("Ct", rownames(B_TT))), ])
+        cycle = c(sp$Ht[grepl("Ct", colnames(sp$Ht))] %*% B_tt[which(grepl("Ct", rownames(B_tt))), ])
         cycle_error = c(sp$Ht[grepl("Ct", colnames(sp$Ht))] %*% errors[grepl("Ct", rownames(errors)), ])
       }else{
         cycle = rep(0, nrow(series))
         cycle_error = rep(0, ncol(errors))
       }
       if(any(grepl("St", rownames(errors)))){
-        seasonal = seasonal = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% B_TT[which(grepl("St", rownames(B_TT))), ])
+        seasonal = seasonal = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% B_tt[which(grepl("St", rownames(B_tt))), ])
         seasonal_error = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% errors[grepl("St", rownames(errors)), ])
       }else{
         seasonal = rep(0, nrow(series))
