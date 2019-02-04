@@ -12,6 +12,25 @@
 #include <omp.h>
 #endif
 
+// R's implementation of the Moore-Penrose pseudo matrix inverse
+// [[Rcpp::export]]
+arma::mat Rginv(arma::mat m){
+  arma::mat U, V;
+  arma::vec S;
+  arma::svd(U, S, V, m, "dc");
+  arma::uvec Positive = arma::find(S > 1E-06 * S(1));
+  if(all(Positive)){
+    arma::mat D = diagmat(S);
+    return V * (1/D * U.t());
+  }else if(!any(Positive)){
+    return arma::zeros(m.n_rows, m.n_cols);
+  }else{
+    S.elem(Positive) = 1/S.elem(Positive);
+    arma::mat D = diagmat(S);
+    return V * D * U.t();
+  }
+}
+
 // B_tt = B_tl = matrix(0, ncol = ncol(yt), nrow = nrow(sp$Ft))
 // P_tt = P_tl = as.list(NA, ncol(yti))
 //
@@ -98,10 +117,10 @@ Rcpp::List kalman_filter(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At,
 // [[Rcpp::export]]
 Rcpp::List kalman_smoother(arma::mat B_tl, arma::mat B_tt, arma::cube P_tl, arma::cube P_tt, arma::mat Ft){
   int t = B_tt.n_cols - 1;
-  arma::mat Ptt_x_Ft_x_PtInv = P_tt.slice(t - 1) * Ft.t() * pinv(P_tl.slice(t));
+  arma::mat Ptt_x_Ft_x_PtInv = P_tt.slice(t - 1) * Ft.t() * Rginv(P_tl.slice(t));
 
   for(int i = t - 1; i >= 0; i--){
-    Ptt_x_Ft_x_PtInv = P_tt.slice(i) * Ft.t() * pinv(P_tl.slice(i + 1));
+    Ptt_x_Ft_x_PtInv = P_tt.slice(i) * Ft.t() * Rginv(P_tl.slice(i + 1));
     B_tt.col(i) = B_tt.col(i) + Ptt_x_Ft_x_PtInv * (B_tt.col(i + 1) - B_tl.col(i + 1));
     P_tt.slice(i) = P_tt.slice(i) + Ptt_x_Ft_x_PtInv * (P_tt.slice(i + 1) - P_tl.slice(i + 1)) * Ptt_x_Ft_x_PtInv.t();
   }
