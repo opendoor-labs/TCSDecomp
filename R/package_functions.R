@@ -33,9 +33,9 @@ SSmodel = function(par, yt, freq, decomp, int_order, trend, init = NULL){
     #T_t = phi1*T_{t-1} + phi2*T_{t-2} + e_t, e_t ~ N(0, sig_t^2)
     
     #Transition matrix
-    Fm = rbind(c(par[grepl("phi", names(par))]),
-               cbind(diag(1, nrow = length(par[grepl("phi", names(par))]) - 1),
-                     matrix(0, nrow = length(par[grepl("phi", names(par))]) - 1)))
+    Fm = rbind(c(par[grepl("phi", names(par))], 0), 
+               cbind(diag(1, nrow = length(par[grepl("phi", names(par))])), 
+                     matrix(0, nrow = length(par[grepl("phi", names(par))]))))
     colnames(Fm) = paste0("Tt", 1:ncol(Fm))
     rownames(Fm) = paste0("Tt", 0:(ncol(Fm) - 1))
     
