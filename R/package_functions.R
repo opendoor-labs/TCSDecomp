@@ -126,7 +126,7 @@ SSmodel = function(par, yt, freq, decomp, int_order, trend, init = NULL){
   
   #Initial guess for unobserved vector
   if(is.null(init)){
-    B0 = c(rep(mean(c(yt[1:ifelse(freq == 1, round(length(y)/4), freq)]), na.rm = T), length(rownames(Fm)[grepl("Tt", rownames(Fm))])),
+    B0 = c(rep(mean(c(range(yt[1:ifelse(freq == 1, round(length(y)/4), freq)], na.rm = T)), na.rm = T), length(rownames(Fm)[grepl("Tt", rownames(Fm))])),
            rep(0, length(rownames(Fm)[grepl("Mt", rownames(Fm))])),
            rep(0, length(rownames(Fm)[grepl("Ct", rownames(Fm))])),
            rep(0, length(rownames(Fm)[grepl("St", rownames(Fm))])))
