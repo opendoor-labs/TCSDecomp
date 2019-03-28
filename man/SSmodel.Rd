@@ -7,7 +7,7 @@ Creates a state space model in list form
 yt = Ht %*% Bt + e_t
 Bt = Ft %*% B_{t=1} + u_t}
 \usage{
-SSmodel(par, yt, freq, decomp, int_order, trend, init = NULL)
+SSmodel(par, yt, freq, decomp, trend_spec, init = NULL)
 }
 \arguments{
 \item{par}{Vector of named parameter values}
@@ -18,11 +18,10 @@ SSmodel(par, yt, freq, decomp, int_order, trend, init = NULL)
 
 \item{decomp}{Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")}
 
-\item{int_order}{Order of integration (0, 1, 2)}
+\item{trend_spec}{Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
+"rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.}
 
 \item{init}{Initial state values for the Kalman filter}
-
-\item{tend}{Trend specification ("", "rw", "hp")}
 }
 \value{
 List of space space matrices
@@ -34,7 +33,7 @@ yt = Ht %*% Bt + e_t
 Bt = Ft %*% B_{t=1} + u_t
 }
 \examples{
-SSmodel(par, y, freq, decomp, int_order, trend, init)
+SSmodel(par, y, freq, decomp, trend_spec, init)
 }
 \author{
 Alex Hubbard (hubbard.alex@gmail.com)

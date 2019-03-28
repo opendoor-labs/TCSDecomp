@@ -12,8 +12,6 @@ tcs_decomp_filter(y, model, plot = F, select = NULL)
 \item{model}{Structural time series model estimated using tcs_decomp_estim.}
 
 \item{plot}{Logial, whether to plot the output or not.}
-
-\item{select}{If NULL, then use the model selected by kf_dceomp_estim; otherwise, use the one specified with select}
 }
 \value{
 List of data tables containing the filtered and smoothed series.

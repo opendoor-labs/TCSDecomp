@@ -10,10 +10,10 @@ into trend, cycle, and/or seasonal components plus noise. The function automatic
 detects the frequency and checks for a seasonal and cycle component if the user does not specify
 the frequency or decomposition model. This can be turned off by setting freq or specifying decomp.}
 \usage{
-tcs_decomp_estim(y, freq = NULL, decomp = NULL, int_order = NULL,
-  blend = F, level = 0.01, ur_test = "adf", ur_type = "level",
-  optim_methods = c("BFGS", "CG", "NM"), maxit = 1000,
-  maxtrials = 10)
+tcs_decomp_estim(y, freq = NULL, decomp = NULL, trend_spec = NULL,
+  det_obs = F, det_trend = F, det_seasonality = F, det_cycle = F,
+  det_drift = F, level = 0.01, optim_methods = c("BFGS", "CG", "NM"),
+  maxit = 1000, maxtrials = 10)
 }
 \arguments{
 \item{y}{Univariate time series of data values. May also be a 2 column data frame containing a date column.}
@@ -22,15 +22,18 @@ tcs_decomp_estim(y, freq = NULL, decomp = NULL, int_order = NULL,
 
 \item{decomp}{Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")}
 
-\item{int_order}{Order of integration (0, 1, 2)}
+\item{trend_spec}{Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
+"rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.}
 
-\item{blend}{Blend the model specifications using a minimum mean squared error weighted sum}
+\item{det_obs}{Set the observation equation error variance to 0 (deterministic observation equation)}
 
-\item{level}{Significance level of statistical tests (0.01, 0.05, 0.1)}
+\item{det_trend}{Set the trend error variance to 0 (deterministic trend)}
 
-\item{ur_test}{Unit root test name ("kpss", "adf", "pp")}
+\item{det_seasonality}{Set the seasonality error variances to 0 (deterministic seasonality)}
 
-\item{ur_type}{Unit root test deterministi type ("level", "trend")}
+\item{det_cycle}{Set thecycle error variance to 0 (deterministic cycle)}
+
+\item{det_drift}{Set the drift error variance to 0 (deterministic drift)}
 
 \item{optim_methods}{Vector of 1 to 3 optimization methods in order of preference ("NR", "BFGS", "CG", "BHHH", or "SANN")}
 
