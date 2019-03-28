@@ -277,11 +277,12 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
   #Define the trend specifications to estiamte
   if(is.null(int_order)){
     int_order = as.character(forecast::ndiffs(y, alpha = level, test = ur_test, type = ur_type))
-    if(int_order %in% c("1", "2")){
-      iter = c("1", "2rw", "2hp")
-    }else{
-      iter = "0"
-    }
+    # if(int_order %in% c("1", "2")){
+    #   iter = c("1", "2rw", "2hp")
+    # }else{
+    #   iter = "0"
+    # }
+    iter = c("0", "1", "2rw", "2hp")
   }else{
     if(!int_order %in% c(0, 1, 2, "2rw", "2hp")){
       stop("int_order must be NULL, 0, 1, or 2.")
@@ -316,7 +317,7 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
     }else if(gsub("rw|hp", "", i) == "1"){
       par = c(sig_t = sqrt(1/3*var(diff(y), na.rm = T)))
     }else if(gsub("rw|hp", "", i) == "2"){
-      par = c(sig_t = sqrt(1/7*var(diff(diff(y)), na.rm = T)))
+      par = c(sig_t = sqrt(1/3*var(diff(diff(y)), na.rm = T)))
       if(i == "2rw"){
         par = c(par, sig_m = unname(par["sig_t"]))
       }
