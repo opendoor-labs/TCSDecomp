@@ -409,10 +409,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   
   #Select the best model based on the maximum likelihood
   model_selection = fit[loglik == max(loglik, na.rm = T), ]$model
-  weights = rep(0, length(fit))
-  names(weights) = names(fit)
   fit = fit[loglik == max(loglik, na.rm = T), ]
-  fit = merge(fit, data.table::data.table(model = names(weights), weight = weights), by = "model")
   fit = list(table = fit)
   if(exists("pgram")){
     fit[["periodogram"]] = pgram
