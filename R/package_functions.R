@@ -127,7 +127,7 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
     P0 = diag(100, nrow = nrow(Fm), ncol = nrow(Fm))
     rownames(P0) = colnames(P0) = rownames(Fm)
     P0["Tt0", "Tt0"] = var(c(yt[1:ifelse(freq == 1, round(length(y)/4), freq)]), na.rm = T)
-    if(trend == "hp") {
+    if(trend_spec == "2rw") {
       P0["Tt1", "Tt1"] = P0["Tt0", "Tt0"]
     }
   }else{
