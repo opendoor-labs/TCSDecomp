@@ -358,7 +358,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
                      tryCatch(maxLik::maxLik(logLik = objective, 
                                              start = par, method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed, 
                                              finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-                                             freq = freq, decomp = decomp, , trend_spec = i),
+                                             freq = freq, decomp = decomp, trend_spec = i),
                               error = function(err){
                                 tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed, 
                                                         finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
@@ -377,11 +377,11 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
                         error = function(err){
                           tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed, 
                                                   finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-                                                  freq = freq, decomp = decomp, , trend_spec = i),
+                                                  freq = freq, decomp = decomp, trend_spec = i),
                                    error = function(err){
                                      tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed, 
                                                              finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-                                                             freq = freq, decomp = decomp, , trend_spec = i),
+                                                             freq = freq, decomp = decomp, trend_spec = i),
                                               error = function(err){NULL})
                                    })
                         })
