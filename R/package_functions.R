@@ -185,8 +185,9 @@ SSmodel = function(par, yt, freq, decomp, int_order, trend, init = NULL){
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
-                           blend = F, level = 0.01, ur_test = "adf", ur_type = "level",
-                           optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
+                            det_obs = F, det_trend = F, det_seasonality = F, det_cycle = F, det_drift = F,
+                            blend = F, level = 0.01, ur_test = "adf", ur_type = "level",
+                            optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
   dates = NULL
   if(is.null(freq)){
     #stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
@@ -340,6 +341,28 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
       par = c(par, sig_e = unname(par["sig_t"]))
     }
     
+    fixed = NULL
+    if(det_obs == T){
+      par["sig_e"] = 0
+      fixed = c(fixed, "sig_e")
+    }
+    if(det_trend == T){
+      par["sig_t"] = 0
+      fixed = c(fixed, "sig_t")
+    }
+    if(det_seasonality == T){
+      par[grepl("sig_j", names(par))] = 0
+      fixed = c(fixed, names(par)[grepl("sig_j", names(par))])
+    }
+    if(det_cycle == T){
+      par["sig_c"] = 0
+      fixed = c(fixed, "sig_c")
+    }
+    if(det_drift == T){
+      par["sig_m"] = T
+      fixed = c(fixed, "sig_m")
+    }
+    
     objective = function(par, na_locs, freq, decomp, int_order, trend, init = NULL){
       yt = matrix(get("y"), nrow = 1)
       sp = SSmodel(par, yt, freq, decomp, int_order, trend)
@@ -367,15 +390,15 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
     }else{
       na_locs = NULL
     }
-    out = tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[1],
+    out = tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[1], fixed = fixed,
                                   finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
                                   na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                    error = function(err){
-                     tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(2, length(optim_methods)))],
+                     tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed,
                                              finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
                                              na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                               error = function(err){
-                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))],
+                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed,
                                                         finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
                                                         na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                                          error = function(err){NULL})
@@ -386,15 +409,15 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
     if(!is.null(out)){
       trials = 1
       while(out$code != 0 & trials < maxtrials){
-        out2 = tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[1],
+        out2 = tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[1], fixed = fixed,
                                        finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
                                        na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                         error = function(err){
-                          tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(2, length(optim_methods)))],
+                          tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed,
                                                   finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
                                                   na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                                    error = function(err){
-                                     tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(3, length(optim_methods)))],
+                                     tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed,
                                                              finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init,
                                                              na_locs = na_locs, freq = freq, decomp = decomp, int_order = gsub("rw|hp", "", i), trend = gsub("[[:digit:]]", "", i)),
                                               error = function(err){NULL})
