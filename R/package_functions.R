@@ -317,7 +317,7 @@ tcs_decomp_estim = function(y, freq = NULL, decomp = NULL, int_order = NULL,
     }else if(gsub("rw|hp", "", i) == "1"){
       par = c(sig_t = sqrt(1/3*var(diff(y), na.rm = T)))
     }else if(gsub("rw|hp", "", i) == "2"){
-      par = c(sig_t = sqrt(1/3*var(diff(diff(y)), na.rm = T)))
+      par = c(sig_t = sqrt(1/7*var(diff(diff(y)), na.rm = T)))
       if(i == "2rw"){
         par = c(par, sig_m = unname(par["sig_t"]))
       }
