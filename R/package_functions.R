@@ -282,6 +282,9 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   # `%fun%` = foreach::`%dopar%`
   # fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
   i = iter[1]
+  print(y)
+  cat(freq, "\n")
+  cat(class(y), "\n")
     #Set up the initial values
     if(i == "rw"){
       par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
@@ -302,12 +305,12 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
       par = c(par, sig_j = unname(rep(par["sig_t"]/(2 * length(seas_freqs)), length(seas_freqs))))
       names(par)[grepl("sig_j", names(par))] = paste0("sig_j", seas_freqs)
     }
-    if(grepl("cycle", decomp)){
-      par = c(par, lambda = log((2 * pi/(freq * 5))/(pi - 2 * pi/(freq * 5))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
-    }
-    if(grepl("seasonal|cycle", decomp)){
-      par = c(par, sig_e = unname(par["sig_t"]))
-    }
+    # if(grepl("cycle", decomp)){
+    #   par = c(par, lambda = log((2 * pi/(freq * 5))/(pi - 2 * pi/(freq * 5))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
+    # }
+    # if(grepl("seasonal|cycle", decomp)){
+    #   par = c(par, sig_e = unname(par["sig_t"]))
+    # }
 # 
 #     #Set any fixed parameters
 #     fixed = NULL
