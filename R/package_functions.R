@@ -264,148 +264,161 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
 
   #Define the trend specifications to estiamte
   if(is.null(trend_spec)) {
-    stop("trend_spec must be 'rw', 'rwd', or '2rw'.")
-  }else if(!trend_spec %in% c("rw", "rwd", "2rw")){
-    stop("trend_spec must be 'rw', 'rwd', or '2rw'.")
-  }
-
-  #Set up the initial values
-  if(trend_spec == "rw"){
-    par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
-  }else if(trend_spec %in% c("rwd", "2rw")){
-    par = c(sig_t = sqrt(1/7 * var(diff(diff(y)), na.rm = T)))
-    if(trend_spec == "rwd"){
-      par = c(par, sig_m = unname(par["sig_t"]))
+    iter = c("rw", "rwd", "2rw")
+  }else {
+    if(!trend_spec %in% c("rw", "rwd", "2rw")){
+      stop("trend_spec must be 'rw', 'rwd', or '2rw'.")
     }
-  }
-  if(grepl("seasonal", decomp)){
-    if(freq %in% c(1, 4, 12)){
-      seas_freqs = 1:(floor(freq)/2)
-    }else if(freq == 52){
-      seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 20, 24)
-    }else if(freq == 365){
-      seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
-    }
-    par = c(par, sig_j = unname(rep(par["sig_t"]/(2 * length(seas_freqs)), length(seas_freqs))))
-    names(par)[grepl("sig_j", names(par))] = paste0("sig_j", seas_freqs)
-  }
-  if(grepl("cycle", decomp)){
-    par = c(par, lambda = log((2 * pi/(freq * 5))/(pi - 2 * pi/(freq * 5))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
-  }
-  if(grepl("seasonal|cycle", decomp)){
-    par = c(par, sig_e = unname(par["sig_t"]))
+    iter = trend_spec
   }
 
-  #Set any fixed parameters
-  fixed = NULL
-  if(det_obs == T){
-    par["sig_e"] = 0
-    fixed = c(fixed, "sig_e")
+  comb = function(DT1, DT2) {
+    return(rbind(DT1, DT2, use.names = T, fill = T))
   }
-  if(det_trend == T){
-    par["sig_t"] = 0
-    fixed = c(fixed, "sig_t")
-  }
-  if(det_seasonality == T){
-    par[grepl("sig_j", names(par))] = 0
-    fixed = c(fixed, names(par)[grepl("sig_j", names(par))])
-  }
-  if(det_cycle == T){
-    par["sig_c"] = 0
-    fixed = c(fixed, "sig_c")
-  }
-  if(det_drift == T){
-    par["sig_m"] = T
-    fixed = c(fixed, "sig_m")
-  }
-
-  #Define the objective function
-  objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
-    yt = matrix(get("y"), nrow = 1)
-    sp = SSmodel(par, yt, freq, decomp, trend_spec, init)
-    ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
-    if (!is.null(na_locs)) {
-      fc = sp$Ht %*% ans$B_tt
-      yt[, na_locs] = fc[, na_locs]
-      ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
-      assign("y", c(yt), .GlobalEnv)
-    }
-    return(ans$loglik)
-  }
-
-  #Get initial values for Kalman Filter
-  sp = SSmodel(par, y, freq, decomp, trend_spec = trend_spec)
-  init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
-  init = kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft)
-  init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
-
-  #Find anhy na values
-  if(any(is.na(y))){
-    na_locs = which(is.na(y))
-  }else{
-    na_locs = NULL
-  }
-
-  #Estimate the model
-  out = tryCatch(maxLik::maxLik(logLik = objective,
-                                start = par, method = optim_methods[1], fixed = fixed,
-                                finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
-                                freq = freq, decomp = decomp, trend_spec = trend_spec),
-                 error = function(err){
-                   tryCatch(maxLik::maxLik(logLik = objective,
-                                           start = par, method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed,
-                                           finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
-                                           freq = freq, decomp = decomp, trend_spec = trend_spec),
-                            error = function(err){
-                              tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed,
-                                                      finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
-                                                      freq = freq, decomp = decomp, trend_spec = trend_spec),
-                                       error = function(err){NULL})
-                            })
-                 })
-
-  #Attempt to get convergence if it failed the first time
-  if(!is.null(out)){
-    trials = 1
-    while (out$code != 0 & trials < maxtrials) {
-      out2 = tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[1], fixed = fixed,
-                                     finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, freq = freq,
-                                     decomp = decomp, trend_spec = trend_spec),
-                      error = function(err){
-                        tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed,
-                                                finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
-                                                freq = freq, decomp = decomp, trend_spec = trend_spec),
-                                 error = function(err){
-                                   tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed,
-                                                           finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
-                                                           freq = freq, decomp = decomp, trend_spec = trend_spec),
-                                            error = function(err){NULL})
-                                 })
-                      })
-      #End the loop if no parameters changed or estimation failed
-      if(!is.null(out2) & !all(coef(out) == coef(out2))){
-        out = out2
-        trials = trials + 1
-      }else {
-        break
+  cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
+  doSNOW::registerDoSNOW(cl)
+  invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
+  `%fun%` = foreach::`%dopar%`
+  fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
+    #Set up the initial values
+    if(i == "rw"){
+      par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
+    }else if(i %in% c("rwd", "2rw")){
+      par = c(sig_t = sqrt(1/7 * var(diff(diff(y)), na.rm = T)))
+      if(i == "rwd"){
+        par = c(par, sig_m = unname(par["sig_t"]))
       }
     }
-  }
-  rm(init)
-  gc()
+    if(grepl("seasonal", decomp)){
+      if(freq %in% c(1, 4, 12)){
+        seas_freqs = 1:(floor(freq)/2)
+      }else if(freq == 52){
+        seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 20, 24)
+      }else if(freq == 365){
+        seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
+      }
+      par = c(par, sig_j = unname(rep(par["sig_t"]/(2 * length(seas_freqs)), length(seas_freqs))))
+      names(par)[grepl("sig_j", names(par))] = paste0("sig_j", seas_freqs)
+    }
+    if(grepl("cycle", decomp)){
+      par = c(par, lambda = log((2 * pi/(freq * 5))/(pi - 2 * pi/(freq * 5))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
+    }
+    if(grepl("seasonal|cycle", decomp)){
+      par = c(par, sig_e = unname(par["sig_t"]))
+    }
 
-  if(!is.null(out)){
-    # Retreive the model output
-    # return(data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum,
-    #                               matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out)))))))
-    fit = data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum,
-                           matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
-  }else{
-    # return(NULL)
-    fit = NULL
-  }
+    #Set any fixed parameters
+    fixed = NULL
+    if(det_obs == T){
+      par["sig_e"] = 0
+      fixed = c(fixed, "sig_e")
+    }
+    if(det_trend == T){
+      par["sig_t"] = 0
+      fixed = c(fixed, "sig_t")
+    }
+    if(det_seasonality == T){
+      par[grepl("sig_j", names(par))] = 0
+      fixed = c(fixed, names(par)[grepl("sig_j", names(par))])
+    }
+    if(det_cycle == T){
+      par["sig_c"] = 0
+      fixed = c(fixed, "sig_c")
+    }
+    if(det_drift == T){
+      par["sig_m"] = T
+      fixed = c(fixed, "sig_m")
+    }
 
+    #Define the objective function
+    objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
+      yt = matrix(get("y"), nrow = 1)
+      sp = SSmodel(par, yt, freq, decomp, trend_spec, init)
+      ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
+      if (!is.null(na_locs)) {
+        fc = sp$Ht %*% ans$B_tt
+        yt[, na_locs] = fc[, na_locs]
+        ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
+        assign("y", c(yt), .GlobalEnv)
+      }
+      return(ans$loglik)
+    }
+  
+    #Get initial values for Kalman Filter
+    sp = SSmodel(par, y, freq, decomp, trend_spec = i)
+    init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    init = kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft)
+    init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
+  
+    #Find anhy na values
+    if(any(is.na(y))){
+      na_locs = which(is.na(y))
+    }else{
+      na_locs = NULL
+    }
+  
+    #Estimate the model
+    out = tryCatch(maxLik::maxLik(logLik = objective,
+                                  start = par, method = optim_methods[1], fixed = fixed,
+                                  finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                  freq = freq, decomp = decomp, trend_spec = i),
+                   error = function(err){
+                     tryCatch(maxLik::maxLik(logLik = objective,
+                                             start = par, method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed,
+                                             finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                             freq = freq, decomp = decomp, trend_spec = i),
+                              error = function(err){
+                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed,
+                                                        finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                                        freq = freq, decomp = decomp, trend_spec = i),
+                                         error = function(err){NULL})
+                              })
+                   })
+  
+    #Attempt to get convergence if it failed the first time
+    if(!is.null(out)){
+      trials = 1
+      while (out$code != 0 & trials < maxtrials) {
+        out2 = tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[1], fixed = fixed,
+                                       finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, freq = freq,
+                                       decomp = decomp, trend_spec = i),
+                        error = function(err){
+                          tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed,
+                                                  finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                                  freq = freq, decomp = decomp, trend_spec = i),
+                                   error = function(err){
+                                     tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed,
+                                                             finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                                             freq = freq, decomp = decomp, trend_spec = i),
+                                              error = function(err){NULL})
+                                   })
+                        })
+        #End the loop if no parameters changed or estimation failed
+        if(!is.null(out2) & !all(coef(out) == coef(out2))){
+          out = out2
+          trials = trials + 1
+        }else {
+          break
+        }
+      }
+    }
+    rm(init)
+    gc()
+  
+    if(!is.null(out)){
+      # Retreive the model output
+      return(data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum,
+                                    matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out)))))))
+    }else{
+      return(NULL)
+    }
+  }
+  snow::stopCluster(cl)
+  
   #Select the best model based on the maximum likelihood
+  model_selection = fit[loglik == max(loglik, na.rm = T), ]$model
+  fit = fit[loglik == max(loglik, na.rm = T), ]
+  fit = list(table = fit)
   if(exists("pgram")){
     fit[["periodogram"]] = pgram
   }else{
