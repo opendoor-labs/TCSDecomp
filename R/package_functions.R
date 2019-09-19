@@ -279,7 +279,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   doSNOW::registerDoSNOW(cl)
   invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
   `%fun%` = foreach::`%dopar%`
-  fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
+  fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel", "kalman_filter", "kalman_smoother")) %fun% {
     #Set up the initial values
     if(i == "rw"){
       par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
