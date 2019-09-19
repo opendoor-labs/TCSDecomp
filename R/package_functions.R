@@ -453,7 +453,7 @@ tcs_decomp_filter = function(y, model, plot = F, select = NULL){
     dates = y[, datecol, with = F][[1]]
     y = y[, colnames(y)[colnames(y) != datecol], with = F][[1]]
     rm(datecol)
-  }else if(length(datecol) > 1)
+  }else if(length(datecol) > 1){
       stop("Too many date columns detected.")
   }else {
     stop("No date column detected. Include a date column or set the frequency.")
