@@ -1,7 +1,7 @@
 #' State space model
 #' Creates a state space model in list form
-#' yt = Ht %*% Bt + e_t
-#' Bt = Ft %*% B_{t=1} + u_t
+#' yt = Ht * Bt + e_t
+#' Bt = Ft * B_{t=1} + u_t
 #'
 #' @param par Vector of named parameter values
 #' @param yt Univariate time series of data values

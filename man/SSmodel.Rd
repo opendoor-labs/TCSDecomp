@@ -4,8 +4,8 @@
 \alias{SSmodel}
 \title{State space model
 Creates a state space model in list form
-yt = Ht %*% Bt + e_t
-Bt = Ft %*% B_{t=1} + u_t}
+yt = Ht * Bt + e_t
+Bt = Ft * B_{t=1} + u_t}
 \usage{
 SSmodel(par, yt, freq, decomp, trend_spec, init = NULL)
 }
@@ -29,8 +29,8 @@ List of space space matrices
 \description{
 State space model
 Creates a state space model in list form
-yt = Ht %*% Bt + e_t
-Bt = Ft %*% B_{t=1} + u_t
+yt = Ht * Bt + e_t
+Bt = Ft * B_{t=1} + u_t
 }
 \examples{
 SSmodel(par, y, freq, decomp, trend_spec, init)
