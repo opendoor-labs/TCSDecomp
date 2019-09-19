@@ -177,21 +177,22 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   if(is.null(freq)){
     y = data.table::as.data.table(y)
     .SD = data.table::.SD
-    if(any(unlist(y[, lapply(.SD, function(x){class(x) %in% c("Date", "yearmon")})]))) {
-      # #Detect the frequency
-      # datecol = names(which(unlist(y[, lapply(.SD, function(x){class(x) %in% c("Date", "yearmon")})])))
-      # if(length(datecol) > 1){
-      #   stop("Too many date columns. Include only 1 date column or set the frequency manually.")
-      # }
-      # datediffs = unique(diff(y[, datecol, with = F][[1]]))
-      # freq = datediffs[which.max(tabulate(match(diff(y[, datecol, with = F][[1]]), datediffs)))]
-      # freq = c(365, 52, 12, 4, 1)[which.min(abs(freq -  c(1, 7, 30, 90, 365)))]
-      # dates = y[, datecol, with = F][[1]]
-      # y = y[, colnames(y)[colnames(y) != datecol], with = F][[1]]
-      # rm(datediffs, datecol)
-    }else{
-      stop("No date column detected. Include a date column or set the frequency.")
-    }
+    print(class(y))
+    # if(any(unlist(y[, lapply(.SD, function(x){class(x) %in% c("Date", "yearmon")})]))) {
+    #   # #Detect the frequency
+    #   # datecol = names(which(unlist(y[, lapply(.SD, function(x){class(x) %in% c("Date", "yearmon")})])))
+    #   # if(length(datecol) > 1){
+    #   #   stop("Too many date columns. Include only 1 date column or set the frequency manually.")
+    #   # }
+    #   # datediffs = unique(diff(y[, datecol, with = F][[1]]))
+    #   # freq = datediffs[which.max(tabulate(match(diff(y[, datecol, with = F][[1]]), datediffs)))]
+    #   # freq = c(365, 52, 12, 4, 1)[which.min(abs(freq -  c(1, 7, 30, 90, 365)))]
+    #   # dates = y[, datecol, with = F][[1]]
+    #   # y = y[, colnames(y)[colnames(y) != datecol], with = F][[1]]
+    #   # rm(datediffs, datecol)
+    # }else{
+    #   stop("No date column detected. Include a date column or set the frequency.")
+    # }
   }
   # else{
   #   if(!is.numeric(freq)){
