@@ -279,8 +279,9 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
   doSNOW::registerDoSNOW(cl)
   invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
-  `%fun%` = foreach::`%dopar%`
-  fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
+  # `%fun%` = foreach::`%dopar%`
+  # fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
+  i = iter[1]
     #Set up the initial values
     if(i == "rw"){
       par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
@@ -408,13 +409,16 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
 
     if(!is.null(out)){
       #Retreive the model output
-      return(data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum,
-                                    matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out)))))))
+      # return(data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum,
+      #                               matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out)))))))
+      fit = data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum,
+                                   matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
     }else{
-      return(NULL)
+      # return(NULL)
+      fit = NULL
     }
-  }
-  snow::stopCluster(cl)
+  # }
+  # snow::stopCluster(cl)
 
   #Select the best model based on the maximum likelihood
   model_selection = fit[loglik == max(loglik, na.rm = T), ]$model
