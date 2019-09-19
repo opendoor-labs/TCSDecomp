@@ -232,7 +232,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     print(pgram)
     pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)#[order(-spec), ]
     print(pgram)
-    pgram = pgram[order(-spec), ]
+    pgram = pgram[order(spec, decreasing = T), ]
     pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
     print(pgram)
     pgram = pgram[period < length(y), ]
