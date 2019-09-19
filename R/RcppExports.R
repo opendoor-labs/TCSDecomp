@@ -2,30 +2,30 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 Rginv <- function(m) {
-    .Call(`_TCSDecomp_Rginv`, m)
+    .Call('_TCSDecomp_Rginv', PACKAGE = 'TCSDecomp', m)
 }
 
 kalman_filter <- function(B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt) {
-    .Call(`_TCSDecomp_kalman_filter`, B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt)
+    .Call('_TCSDecomp_kalman_filter', PACKAGE = 'TCSDecomp', B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt)
 }
 
 kalman_smoother <- function(B_tl, B_tt, P_tl, P_tt, Ft) {
-    .Call(`_TCSDecomp_kalman_smoother`, B_tl, B_tt, P_tl, P_tt, Ft)
+    .Call('_TCSDecomp_kalman_smoother', PACKAGE = 'TCSDecomp', B_tl, B_tt, P_tl, P_tt, Ft)
 }
 
 rcpparma_hello_world <- function() {
-    .Call(`_TCSDecomp_rcpparma_hello_world`)
+    .Call('_TCSDecomp_rcpparma_hello_world', PACKAGE = 'TCSDecomp')
 }
 
 rcpparma_outerproduct <- function(x) {
-    .Call(`_TCSDecomp_rcpparma_outerproduct`, x)
+    .Call('_TCSDecomp_rcpparma_outerproduct', PACKAGE = 'TCSDecomp', x)
 }
 
 rcpparma_innerproduct <- function(x) {
-    .Call(`_TCSDecomp_rcpparma_innerproduct`, x)
+    .Call('_TCSDecomp_rcpparma_innerproduct', PACKAGE = 'TCSDecomp', x)
 }
 
 rcpparma_bothproducts <- function(x) {
-    .Call(`_TCSDecomp_rcpparma_bothproducts`, x)
+    .Call('_TCSDecomp_rcpparma_bothproducts', PACKAGE = 'TCSDecomp', x)
 }
 

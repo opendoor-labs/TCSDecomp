@@ -4,12 +4,15 @@
 // Correctly setup the build environment
 // [[Rcpp::depends(RcppArmadillo)]]
 
-// Add a flag to enable OpenMP at compile time
-// [[Rcpp::plugins(openmp)]]
-
 // Protect against compilers without OpenMP
 #ifdef _OPENMP
-#include <omp.h>
+  #include <omp.h>
+#endif
+
+#ifdef _OPENMP
+  // multithreaded OpenMP version of code
+#else
+  // single-threaded version of code
 #endif
 
 // R's implementation of the Moore-Penrose pseudo matrix inverse
