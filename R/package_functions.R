@@ -308,29 +308,29 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     if(grepl("seasonal|cycle", decomp)){
       par = c(par, sig_e = unname(par["sig_t"]))
     }
-
-    #Set any fixed parameters
-    fixed = NULL
-    if(det_obs == T){
-      par["sig_e"] = 0
-      fixed = c(fixed, "sig_e")
-    }
-    if(det_trend == T){
-      par["sig_t"] = 0
-      fixed = c(fixed, "sig_t")
-    }
-    if(det_seasonality == T){
-      par[grepl("sig_j", names(par))] = 0
-      fixed = c(fixed, names(par)[grepl("sig_j", names(par))])
-    }
-    if(det_cycle == T){
-      par["sig_c"] = 0
-      fixed = c(fixed, "sig_c")
-    }
-    if(det_drift == T){
-      par["sig_m"] = T
-      fixed = c(fixed, "sig_m")
-    }
+# 
+#     #Set any fixed parameters
+#     fixed = NULL
+#     if(det_obs == T){
+#       par["sig_e"] = 0
+#       fixed = c(fixed, "sig_e")
+#     }
+#     if(det_trend == T){
+#       par["sig_t"] = 0
+#       fixed = c(fixed, "sig_t")
+#     }
+#     if(det_seasonality == T){
+#       par[grepl("sig_j", names(par))] = 0
+#       fixed = c(fixed, names(par)[grepl("sig_j", names(par))])
+#     }
+#     if(det_cycle == T){
+#       par["sig_c"] = 0
+#       fixed = c(fixed, "sig_c")
+#     }
+#     if(det_drift == T){
+#       par["sig_m"] = T
+#       fixed = c(fixed, "sig_m")
+#     }
 
   #   #Define the objective function
   #   objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
