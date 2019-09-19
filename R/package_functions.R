@@ -216,53 +216,53 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     stop("maxtrials must be numeric and greater than 0.")
   }
   
-  #Set the decomposition
-  if(is.null(decomp)){
-    #Calculate a periodogram for the data
-    pgram = TSA::periodogram(imputeTS::na.kalman(y), plot = F)
-    pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
-    pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
-    pgram = pgram[period < length(y), ]
-    
-    #Calculate a periodogram for random data
-    pgram_base = TSA::periodogram(rnorm(10000), plot = F)
-    pgram_base = data.table::data.table(freq = pgram_base$freq, spec = pgram_base$spec, period = 1/pgram_base$spec)[order(-spec), ]
-    pgram_base[, `:=`("d", (spec)/mean(spec, na.rm = T))]
-    
-    #Find periods that have a significant spectral number
-    periods = pgram[which(sapply(1:nrow(pgram), function(x) {
-      nrow(pgram_base[d > pgram[x, ]$d, ])/nrow(pgram_base)
-    }) <= level), ]$period
-    pgram = pgram[, `:=`("d", NULL)][order(period), ]
-    pgram[, `:=`("significant", ifelse(period %in% periods, 
-                                       T, F))]
-    decomp = "trend"
-    if(length(periods) > 0){
-      #Check for seasonality using the periodogram or the unit root test on the frequency differences
-      if(freq > 1 & any(abs(periods - freq) < freq/2)){
-        decomp = paste0(decomp, "-seasonal")
-      }
-      
-      #Check for longer term cycle
-      if(any(periods > freq * 3)){
-        decomp = paste0(decomp, "-cycle")
-      }
-    }
-    if(decomp == "trend"){
-      decomp = "trend-noise"
-    }
-    rm(pgram_base, periods)
-  }
-  
-  #Define the trend specifications to estiamte
-  if(is.null(trend_spec)) {
-    iter = c("rw", "rwd", "2rw")
-  }else {
-    if(!trend_spec %in% c("rw", "rwd", "2rw")){
-      stop("trend_spec must be 'rw', 'rwd', or '2rw'.")
-    }
-    iter = trend_spec
-  }
+  # #Set the decomposition
+  # if(is.null(decomp)){
+  #   #Calculate a periodogram for the data
+  #   pgram = TSA::periodogram(imputeTS::na.kalman(y), plot = F)
+  #   pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
+  #   pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
+  #   pgram = pgram[period < length(y), ]
+  #   
+  #   #Calculate a periodogram for random data
+  #   pgram_base = TSA::periodogram(rnorm(10000), plot = F)
+  #   pgram_base = data.table::data.table(freq = pgram_base$freq, spec = pgram_base$spec, period = 1/pgram_base$spec)[order(-spec), ]
+  #   pgram_base[, `:=`("d", (spec)/mean(spec, na.rm = T))]
+  #   
+  #   #Find periods that have a significant spectral number
+  #   periods = pgram[which(sapply(1:nrow(pgram), function(x) {
+  #     nrow(pgram_base[d > pgram[x, ]$d, ])/nrow(pgram_base)
+  #   }) <= level), ]$period
+  #   pgram = pgram[, `:=`("d", NULL)][order(period), ]
+  #   pgram[, `:=`("significant", ifelse(period %in% periods, 
+  #                                      T, F))]
+  #   decomp = "trend"
+  #   if(length(periods) > 0){
+  #     #Check for seasonality using the periodogram or the unit root test on the frequency differences
+  #     if(freq > 1 & any(abs(periods - freq) < freq/2)){
+  #       decomp = paste0(decomp, "-seasonal")
+  #     }
+  #     
+  #     #Check for longer term cycle
+  #     if(any(periods > freq * 3)){
+  #       decomp = paste0(decomp, "-cycle")
+  #     }
+  #   }
+  #   if(decomp == "trend"){
+  #     decomp = "trend-noise"
+  #   }
+  #   rm(pgram_base, periods)
+  # }
+  # 
+  # #Define the trend specifications to estiamte
+  # if(is.null(trend_spec)) {
+  #   iter = c("rw", "rwd", "2rw")
+  # }else {
+  #   if(!trend_spec %in% c("rw", "rwd", "2rw")){
+  #     stop("trend_spec must be 'rw', 'rwd', or '2rw'.")
+  #   }
+  #   iter = trend_spec
+  # }
   
   # comb = function(DT1, DT2) {
   #   return(rbind(DT1, DT2, use.names = T, fill = T))
