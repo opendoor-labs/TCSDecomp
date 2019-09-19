@@ -230,8 +230,9 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     #Calculate a periodogram for the data
     pgram = TSA::periodogram(imputeTS::na_kalman(y), plot = F)
     print(pgram)
-    pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
+    pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)#[order(-spec), ]
     print(pgram)
+    pgram = pgram[order(-spec), ]
     pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
     print(pgram)
     pgram = pgram[period < length(y), ]
