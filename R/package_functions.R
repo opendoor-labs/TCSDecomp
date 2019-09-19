@@ -202,231 +202,231 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
       stop("No date column detected. Include a date column or set the frequency.")
     }
   }
-  # else{
-  #   if(!is.numeric(freq)){
-  #     stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
-  #   }else if(!freq %in% c(1, 4, 12, 52, 365)){
-  #     stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
-  #   }
-  # }
-  # if(level < 0.01 | level > 0.1){
-  #   stop("level must be between 0.01 and 0.1.")
-  # }
-  # if(any(!optim_methods %in% c("NR", "BFGS", "BHHH", "SANN", "CG", "NM")) | length(optim_methods) < 1 | length(optim_methods) > 3){
-  #   stop("optim_methods must be a vector of length 1 to 3 containing 'NR', 'BFGS', 'BHHH', 'SANN', 'CG', or 'NM'")
-  # }
-  # if(!is.numeric(maxit)){
-  #   stop("maxit must be numeric and greater than 0.")
-  # }else if(maxit <= 0){
-  #   stop("maxit must be numeric and greater than 0.")
-  # }
-  # if(!is.numeric(maxtrials)){
-  #   stop("maxtrials must be numeric and greater than 0.")
-  # }else if(maxtrials <= 0){
-  #   stop("maxtrials must be numeric and greater than 0.")
-  # }
-  # 
-  # #Set the decomposition
-  # if(is.null(decomp)){
-  #   #Calculate a periodogram for the data
-  #   pgram = TSA::periodogram(imputeTS::na.kalman(y), plot = F)
-  #   pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
-  #   pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
-  #   pgram = pgram[period < length(y), ]
-  #   
-  #   #Calculate a periodogram for random data
-  #   pgram_base = TSA::periodogram(rnorm(10000), plot = F)
-  #   pgram_base = data.table::data.table(freq = pgram_base$freq, spec = pgram_base$spec, period = 1/pgram_base$spec)[order(-spec), ]
-  #   pgram_base[, `:=`("d", (spec)/mean(spec, na.rm = T))]
-  #   
-  #   #Find periods that have a significant spectral number
-  #   periods = pgram[which(sapply(1:nrow(pgram), function(x) {
-  #     nrow(pgram_base[d > pgram[x, ]$d, ])/nrow(pgram_base)
-  #   }) <= level), ]$period
-  #   pgram = pgram[, `:=`("d", NULL)][order(period), ]
-  #   pgram[, `:=`("significant", ifelse(period %in% periods, 
-  #                                      T, F))]
-  #   decomp = "trend"
-  #   if(length(periods) > 0){
-  #     #Check for seasonality using the periodogram or the unit root test on the frequency differences
-  #     if(freq > 1 & any(abs(periods - freq) < freq/2)){
-  #       decomp = paste0(decomp, "-seasonal")
-  #     }
-  #     
-  #     #Check for longer term cycle
-  #     if(any(periods > freq * 3)){
-  #       decomp = paste0(decomp, "-cycle")
-  #     }
-  #   }
-  #   if(decomp == "trend"){
-  #     decomp = "trend-noise"
-  #   }
-  #   rm(pgram_base, periods)
-  # }
-  # 
-  # #Define the trend specifications to estiamte
-  # if(is.null(trend_spec)) {
-  #   iter = c("rw", "rwd", "2rw")
-  # }else {
-  #   if(!trend_spec %in% c("rw", "rwd", "2rw")){
-  #     stop("trend_spec must be 'rw', 'rwd', or '2rw'.")
-  #   }
-  #   iter = trend_spec
-  # }
-  
-  # comb = function(DT1, DT2) {
-  #   return(rbind(DT1, DT2, use.names = T, fill = T))
-  # }
-  # cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
-  # doSNOW::registerDoSNOW(cl)
-  # invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
-  # `%fun%` = foreach::`%dopar%`
-  # fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
-  #   #Set up the initial values
-  #   if(i == "rw"){
-  #     par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
-  #   }else if(i %in% c("rwd", "2rw")){
-  #     par = c(sig_t = sqrt(1/7 * var(diff(diff(y)), na.rm = T)))
-  #     if(i == "rwd"){
-  #       par = c(par, sig_m = unname(par["sig_t"]))
-  #     }
-  #   }
-  #   if(grepl("seasonal", decomp)){
-  #     if(freq %in% c(1, 4, 12)){
-  #       seas_freqs = 1:(floor(freq)/2)
-  #     }else if(freq == 52){
-  #       seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 20, 24)
-  #     }else if(freq == 365){
-  #       seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
-  #     }
-  #     par = c(par, sig_j = unname(rep(par["sig_t"]/(2 * length(seas_freqs)), length(seas_freqs))))
-  #     names(par)[grepl("sig_j", names(par))] = paste0("sig_j", seas_freqs)
-  #   }
-  #   if(grepl("cycle", decomp)){
-  #     par = c(par, lambda = log((2 * pi/(freq * 5))/(pi - 2 * pi/(freq * 5))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
-  #   }
-  #   if(grepl("seasonal|cycle", decomp)){
-  #     par = c(par, sig_e = unname(par["sig_t"]))
-  #   }
-  #   
-  #   #Set any fixed parameters
-  #   fixed = NULL
-  #   if(det_obs == T){
-  #     par["sig_e"] = 0
-  #     fixed = c(fixed, "sig_e")
-  #   }
-  #   if(det_trend == T){
-  #     par["sig_t"] = 0
-  #     fixed = c(fixed, "sig_t")
-  #   }
-  #   if(det_seasonality == T){
-  #     par[grepl("sig_j", names(par))] = 0
-  #     fixed = c(fixed, names(par)[grepl("sig_j", names(par))])
-  #   }
-  #   if(det_cycle == T){
-  #     par["sig_c"] = 0
-  #     fixed = c(fixed, "sig_c")
-  #   }
-  #   if(det_drift == T){
-  #     par["sig_m"] = T
-  #     fixed = c(fixed, "sig_m")
-  #   }
-  #   
-  #   #Define the objective function
-  #   objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
-  #     yt = matrix(get("y"), nrow = 1)
-  #     sp = SSmodel(par, yt, freq, decomp, trend_spec, init)
-  #     ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
-  #     if (!is.null(na_locs)) {
-  #       fc = sp$Ht %*% ans$B_tt
-  #       yt[, na_locs] = fc[, na_locs]
-  #       ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
-  #       assign("y", c(yt), .GlobalEnv)
-  #     }
-  #     return(ans$loglik)
-  #   }
-  #   
-  #   #Get initial values for Kalman Filter
-  #   sp = SSmodel(par, y, freq, decomp, trend_spec = i)
-  #   init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
-  #   init = kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft)
-  #   init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
-  #   
-  #   #Find anhy na values
-  #   if(any(is.na(y))){
-  #     na_locs = which(is.na(y))
-  #   }else{
-  #     na_locs = NULL
-  #   }
-  #   
-  #   #Estimate the model
-  #   out = tryCatch(maxLik::maxLik(logLik = objective, 
-  #                                 start = par, method = optim_methods[1], fixed = fixed, 
-  #                                 finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-  #                                 freq = freq, decomp = decomp, trend_spec = i), 
-  #                  error = function(err){
-  #                    tryCatch(maxLik::maxLik(logLik = objective, 
-  #                                            start = par, method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed, 
-  #                                            finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-  #                                            freq = freq, decomp = decomp, trend_spec = i),
-  #                             error = function(err){
-  #                               tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed, 
-  #                                                       finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-  #                                                       freq = freq, decomp = decomp, trend_spec = i),
-  #                                        error = function(err){NULL})
-  #                             })
-  #                  })
-  #   
-  #   #Attempt to get convergence if it failed the first time
-  #   if(!is.null(out)){
-  #     trials = 1
-  #     while (out$code != 0 & trials < maxtrials) {
-  #       out2 = tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[1], fixed = fixed, 
-  #                                      finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, freq = freq, 
-  #                                      decomp = decomp, trend_spec = i),
-  #                       error = function(err){
-  #                         tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed, 
-  #                                                 finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-  #                                                 freq = freq, decomp = decomp, trend_spec = i),
-  #                                  error = function(err){
-  #                                    tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed, 
-  #                                                            finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-  #                                                            freq = freq, decomp = decomp, trend_spec = i),
-  #                                             error = function(err){NULL})
-  #                                  })
-  #                       })
-  #       #End the loop if no parameters changed or estimation failed
-  #       if(!is.null(out2) & !all(coef(out) == coef(out2))){
-  #         out = out2
-  #         trials = trials + 1
-  #       }else {
-  #         break
-  #       }
-  #     }
-  #   }
-  #   rm(init)
-  #   gc()
-  #   
-  #   if(!is.null(out)){
-  #     #Retreive the model output
-  #     return(data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum, 
-  #                                   matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out)))))))
-  #   }else{
-  #     return(NULL)
-  #   }
-  # }
-  # snow::stopCluster(cl)
-  # 
-  # #Select the best model based on the maximum likelihood
-  # model_selection = fit[loglik == max(loglik, na.rm = T), ]$model
-  # fit = fit[loglik == max(loglik, na.rm = T), ]
-  # fit = list(table = fit)
-  # if(exists("pgram")){
-  #   fit[["periodogram"]] = pgram
-  # }else{
-  #   fit[["periodogram"]] = NA
-  # }
-  # return(fit)
+  else{
+    if(!is.numeric(freq)){
+      stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
+    }else if(!freq %in% c(1, 4, 12, 52, 365)){
+      stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
+    }
+  }
+  if(level < 0.01 | level > 0.1){
+    stop("level must be between 0.01 and 0.1.")
+  }
+  if(any(!optim_methods %in% c("NR", "BFGS", "BHHH", "SANN", "CG", "NM")) | length(optim_methods) < 1 | length(optim_methods) > 3){
+    stop("optim_methods must be a vector of length 1 to 3 containing 'NR', 'BFGS', 'BHHH', 'SANN', 'CG', or 'NM'")
+  }
+  if(!is.numeric(maxit)){
+    stop("maxit must be numeric and greater than 0.")
+  }else if(maxit <= 0){
+    stop("maxit must be numeric and greater than 0.")
+  }
+  if(!is.numeric(maxtrials)){
+    stop("maxtrials must be numeric and greater than 0.")
+  }else if(maxtrials <= 0){
+    stop("maxtrials must be numeric and greater than 0.")
+  }
+
+  #Set the decomposition
+  if(is.null(decomp)){
+    #Calculate a periodogram for the data
+    pgram = TSA::periodogram(imputeTS::na.kalman(y), plot = F)
+    pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
+    pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
+    pgram = pgram[period < length(y), ]
+
+    #Calculate a periodogram for random data
+    pgram_base = TSA::periodogram(rnorm(10000), plot = F)
+    pgram_base = data.table::data.table(freq = pgram_base$freq, spec = pgram_base$spec, period = 1/pgram_base$spec)[order(-spec), ]
+    pgram_base[, `:=`("d", (spec)/mean(spec, na.rm = T))]
+
+    #Find periods that have a significant spectral number
+    periods = pgram[which(sapply(1:nrow(pgram), function(x) {
+      nrow(pgram_base[d > pgram[x, ]$d, ])/nrow(pgram_base)
+    }) <= level), ]$period
+    pgram = pgram[, `:=`("d", NULL)][order(period), ]
+    pgram[, `:=`("significant", ifelse(period %in% periods,
+                                       T, F))]
+    decomp = "trend"
+    if(length(periods) > 0){
+      #Check for seasonality using the periodogram or the unit root test on the frequency differences
+      if(freq > 1 & any(abs(periods - freq) < freq/2)){
+        decomp = paste0(decomp, "-seasonal")
+      }
+
+      #Check for longer term cycle
+      if(any(periods > freq * 3)){
+        decomp = paste0(decomp, "-cycle")
+      }
+    }
+    if(decomp == "trend"){
+      decomp = "trend-noise"
+    }
+    rm(pgram_base, periods)
+  }
+
+  #Define the trend specifications to estiamte
+  if(is.null(trend_spec)) {
+    iter = c("rw", "rwd", "2rw")
+  }else {
+    if(!trend_spec %in% c("rw", "rwd", "2rw")){
+      stop("trend_spec must be 'rw', 'rwd', or '2rw'.")
+    }
+    iter = trend_spec
+  }
+
+  comb = function(DT1, DT2) {
+    return(rbind(DT1, DT2, use.names = T, fill = T))
+  }
+  cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
+  doSNOW::registerDoSNOW(cl)
+  invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
+  `%fun%` = foreach::`%dopar%`
+  fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
+    #Set up the initial values
+    if(i == "rw"){
+      par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
+    }else if(i %in% c("rwd", "2rw")){
+      par = c(sig_t = sqrt(1/7 * var(diff(diff(y)), na.rm = T)))
+      if(i == "rwd"){
+        par = c(par, sig_m = unname(par["sig_t"]))
+      }
+    }
+    if(grepl("seasonal", decomp)){
+      if(freq %in% c(1, 4, 12)){
+        seas_freqs = 1:(floor(freq)/2)
+      }else if(freq == 52){
+        seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 20, 24)
+      }else if(freq == 365){
+        seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
+      }
+      par = c(par, sig_j = unname(rep(par["sig_t"]/(2 * length(seas_freqs)), length(seas_freqs))))
+      names(par)[grepl("sig_j", names(par))] = paste0("sig_j", seas_freqs)
+    }
+    if(grepl("cycle", decomp)){
+      par = c(par, lambda = log((2 * pi/(freq * 5))/(pi - 2 * pi/(freq * 5))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
+    }
+    if(grepl("seasonal|cycle", decomp)){
+      par = c(par, sig_e = unname(par["sig_t"]))
+    }
+
+    #Set any fixed parameters
+    fixed = NULL
+    if(det_obs == T){
+      par["sig_e"] = 0
+      fixed = c(fixed, "sig_e")
+    }
+    if(det_trend == T){
+      par["sig_t"] = 0
+      fixed = c(fixed, "sig_t")
+    }
+    if(det_seasonality == T){
+      par[grepl("sig_j", names(par))] = 0
+      fixed = c(fixed, names(par)[grepl("sig_j", names(par))])
+    }
+    if(det_cycle == T){
+      par["sig_c"] = 0
+      fixed = c(fixed, "sig_c")
+    }
+    if(det_drift == T){
+      par["sig_m"] = T
+      fixed = c(fixed, "sig_m")
+    }
+
+    #Define the objective function
+    objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
+      yt = matrix(get("y"), nrow = 1)
+      sp = SSmodel(par, yt, freq, decomp, trend_spec, init)
+      ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
+      if (!is.null(na_locs)) {
+        fc = sp$Ht %*% ans$B_tt
+        yt[, na_locs] = fc[, na_locs]
+        ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
+        assign("y", c(yt), .GlobalEnv)
+      }
+      return(ans$loglik)
+    }
+
+    #Get initial values for Kalman Filter
+    sp = SSmodel(par, y, freq, decomp, trend_spec = i)
+    init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    init = kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft)
+    init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
+
+    #Find anhy na values
+    if(any(is.na(y))){
+      na_locs = which(is.na(y))
+    }else{
+      na_locs = NULL
+    }
+
+    #Estimate the model
+    out = tryCatch(maxLik::maxLik(logLik = objective,
+                                  start = par, method = optim_methods[1], fixed = fixed,
+                                  finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                  freq = freq, decomp = decomp, trend_spec = i),
+                   error = function(err){
+                     tryCatch(maxLik::maxLik(logLik = objective,
+                                             start = par, method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed,
+                                             finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                             freq = freq, decomp = decomp, trend_spec = i),
+                              error = function(err){
+                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed,
+                                                        finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                                        freq = freq, decomp = decomp, trend_spec = i),
+                                         error = function(err){NULL})
+                              })
+                   })
+
+    #Attempt to get convergence if it failed the first time
+    if(!is.null(out)){
+      trials = 1
+      while (out$code != 0 & trials < maxtrials) {
+        out2 = tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[1], fixed = fixed,
+                                       finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, freq = freq,
+                                       decomp = decomp, trend_spec = i),
+                        error = function(err){
+                          tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed,
+                                                  finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                                  freq = freq, decomp = decomp, trend_spec = i),
+                                   error = function(err){
+                                     tryCatch(maxLik::maxLik(logLik = objective, start = coef(out), method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed,
+                                                             finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs,
+                                                             freq = freq, decomp = decomp, trend_spec = i),
+                                              error = function(err){NULL})
+                                   })
+                        })
+        #End the loop if no parameters changed or estimation failed
+        if(!is.null(out2) & !all(coef(out) == coef(out2))){
+          out = out2
+          trials = trials + 1
+        }else {
+          break
+        }
+      }
+    }
+    rm(init)
+    gc()
+
+    if(!is.null(out)){
+      #Retreive the model output
+      return(data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum,
+                                    matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out)))))))
+    }else{
+      return(NULL)
+    }
+  }
+  snow::stopCluster(cl)
+
+  #Select the best model based on the maximum likelihood
+  model_selection = fit[loglik == max(loglik, na.rm = T), ]$model
+  fit = fit[loglik == max(loglik, na.rm = T), ]
+  fit = list(table = fit)
+  if(exists("pgram")){
+    fit[["periodogram"]] = pgram
+  }else{
+    fit[["periodogram"]] = NA
+  }
+  return(fit)
 }
 
 #' Kalman filter an estimated model from tcs_decomp_estim
@@ -441,15 +441,20 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
 tcs_decomp_filter = function(y, model, plot = F, select = NULL){
   y = data.table::as.data.table(y)
   .SD = data.table::.SD
-  if(any(unlist(y[, lapply(.SD, function(x){class(x) == "Date"})]))){
-    #Detect the frequency
-    datecol = names(which(unlist(y[, lapply(.SD, function(x){class(x) == "Date"})])))
-    if(length(datecol) > 1){
-      stop("Too many date columns. Include only 1 date column or set the frequency manually.")
+  datecol = unlist(lapply(colnames(y), function(x){
+    if(class(y[, c(x), with = F][[1]]) %in% c("Date", "yearmon")){
+      return(x)
+    }else{
+      return(NULL)
     }
+  }))
+  if(length(datecol) == 1){
+    #Detect the frequency
     dates = y[, datecol, with = F][[1]]
     y = y[, colnames(y)[colnames(y) != datecol], with = F][[1]]
     rm(datecol)
+  }else if(length(datecol) > 1)
+      stop("Too many date columns detected.")
   }else {
     stop("No date column detected. Include a date column or set the frequency.")
   }
