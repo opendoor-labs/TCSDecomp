@@ -177,7 +177,6 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   if(is.null(freq)){
     y = data.table::as.data.table(y)
     .SD = data.table::.SD
-    print(y[, lapply(.SD, function(x){class(x) %in% c("Date", "yearmon")})])
     datecol = unlist(lapply(colnames(y), function(x){
       if(class(y[, c(x), with = F][[1]]) %in% c("Date", "yearmon")){
         return(x)
