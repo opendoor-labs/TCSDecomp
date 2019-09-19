@@ -184,6 +184,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
         return(NULL)
       }
     }))
+    cat(datecol, "\n")
     if(length(datecol) == 1) {
       #Detect the frequency
       if(length(datecol) > 1){
@@ -224,6 +225,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   }else if(maxtrials <= 0){
     stop("maxtrials must be numeric and greater than 0.")
   }
+  cat(freq, "\n")
 
   #Set the decomposition
   if(is.null(decomp)){
@@ -282,9 +284,6 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   # `%fun%` = foreach::`%dopar%`
   # fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel")) %fun% {
   i = iter[1]
-  print(y)
-  cat(freq, "\n")
-  cat(class(y), "\n")
     #Set up the initial values
     if(i == "rw"){
       par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
