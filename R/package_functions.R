@@ -224,9 +224,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   }else if(maxtrials <= 0){
     stop("maxtrials must be numeric and greater than 0.")
   }
-  cat(freq, "\n")
-  print(y)
-
+  
   #Set the decomposition
   if(is.null(decomp)){
     #Calculate a periodogram for the data
@@ -264,6 +262,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     }
     rm(pgram_base, periods)
   }
+  cat(decomp, "\n")
 
   #Define the trend specifications to estiamte
   if(is.null(trend_spec)) {
