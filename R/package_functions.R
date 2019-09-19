@@ -178,7 +178,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     y = data.table::as.data.table(y)
     .SD = data.table::.SD
     datecol = unlist(lapply(colnames(y), function(x){
-      if(class(y[, c(x), with = F][[1]]) %in% c("Date", "yearmon")){
+      if(class(y[, c(x), with = F][[1]]) %in% c("Date")){
         return(x)
       }else{
         return(NULL)
@@ -186,7 +186,6 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     }))
     if(length(datecol) == 1) {
       #Detect the frequency
-      # datecol = names(which(unlist(y[, lapply(.SD, function(x){class(x) %in% c("Date", "yearmon")})])))
       if(length(datecol) > 1){
         stop("Too many date columns. Include only 1 date column or set the frequency manually.")
       }
@@ -442,7 +441,7 @@ tcs_decomp_filter = function(y, model, plot = F, select = NULL){
   y = data.table::as.data.table(y)
   .SD = data.table::.SD
   datecol = unlist(lapply(colnames(y), function(x){
-    if(class(y[, c(x), with = F][[1]]) %in% c("Date", "yearmon")){
+    if(class(y[, c(x), with = F][[1]]) %in% c("Date")){
       return(x)
     }else{
       return(NULL)
