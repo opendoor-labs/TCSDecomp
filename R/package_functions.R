@@ -199,7 +199,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
       rm(datediffs, datecol)
     }else if(length(datecol) > 1){
       stop("Too many date columns detected.")
-    else{
+    }else{
       stop("No date column detected. Include a date column or set the frequency.")
     }
   }
