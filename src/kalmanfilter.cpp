@@ -9,12 +9,6 @@
   #include <omp.h>
 #endif
 
-#ifdef _OPENMP
-  // multithreaded OpenMP version of code
-#else
-  // single-threaded version of code
-#endif
-
 // R's implementation of the Moore-Penrose pseudo matrix inverse
 // [[Rcpp::export]]
 arma::mat Rginv(arma::mat m){
