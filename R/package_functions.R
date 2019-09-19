@@ -192,30 +192,31 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     }else{
       stop("No date column detected. Include a date column or set the frequency.")
     }
-  }else{
-    if(!is.numeric(freq)){
-      stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
-    }else if(!freq %in% c(1, 4, 12, 52, 365)){
-      stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
-    }
   }
-  if(level < 0.01 | level > 0.1){
-    stop("level must be between 0.01 and 0.1.")
-  }
-  if(any(!optim_methods %in% c("NR", "BFGS", "BHHH", "SANN", "CG", "NM")) | length(optim_methods) < 1 | length(optim_methods) > 3){
-    stop("optim_methods must be a vector of length 1 to 3 containing 'NR', 'BFGS', 'BHHH', 'SANN', 'CG', or 'NM'")
-  }
-  if(!is.numeric(maxit)){
-    stop("maxit must be numeric and greater than 0.")
-  }else if(maxit <= 0){
-    stop("maxit must be numeric and greater than 0.")
-  }
-  if(!is.numeric(maxtrials)){
-    stop("maxtrials must be numeric and greater than 0.")
-  }else if(maxtrials <= 0){
-    stop("maxtrials must be numeric and greater than 0.")
-  }
-  
+  # else{
+  #   if(!is.numeric(freq)){
+  #     stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
+  #   }else if(!freq %in% c(1, 4, 12, 52, 365)){
+  #     stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
+  #   }
+  # }
+  # if(level < 0.01 | level > 0.1){
+  #   stop("level must be between 0.01 and 0.1.")
+  # }
+  # if(any(!optim_methods %in% c("NR", "BFGS", "BHHH", "SANN", "CG", "NM")) | length(optim_methods) < 1 | length(optim_methods) > 3){
+  #   stop("optim_methods must be a vector of length 1 to 3 containing 'NR', 'BFGS', 'BHHH', 'SANN', 'CG', or 'NM'")
+  # }
+  # if(!is.numeric(maxit)){
+  #   stop("maxit must be numeric and greater than 0.")
+  # }else if(maxit <= 0){
+  #   stop("maxit must be numeric and greater than 0.")
+  # }
+  # if(!is.numeric(maxtrials)){
+  #   stop("maxtrials must be numeric and greater than 0.")
+  # }else if(maxtrials <= 0){
+  #   stop("maxtrials must be numeric and greater than 0.")
+  # }
+  # 
   # #Set the decomposition
   # if(is.null(decomp)){
   #   #Calculate a periodogram for the data
