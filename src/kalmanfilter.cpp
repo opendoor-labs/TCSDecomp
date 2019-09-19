@@ -126,7 +126,7 @@ Rcpp::List kalman_smoother(arma::mat B_tl, arma::mat B_tt, arma::cube P_tl, arma
 }
 
 
-//RcppArmadillo.package.skeleton(name = "kfdecomp", path = "/Users/alexhubbard/Dropbox (Opendoor)/R Codes/Packages")
+//RcppArmadillo.package.skeleton(name = "TCSDecomp", path = "/Users/alexhubbard/Dropbox (Opendoor)/R Codes/Packages")
 //compileAttributes(verbose=TRUE)
 //library(tools)
 //package_native_routine_registration_skeleton("/Users/alexhubbard/Dropbox (Opendoor)/R Codes/Packages/TCSDecomp")
