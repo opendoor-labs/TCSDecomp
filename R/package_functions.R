@@ -184,14 +184,11 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
         return(NULL)
       }
     }))
-    cat(datecol, "\n")
     if(length(datecol) == 1) {
       #Detect the frequency
       if(length(datecol) > 1){
         stop("Too many date columns. Include only 1 date column or set the frequency manually.")
       }
-      print(y[, c(datecol), with = F][[1]])
-      cat(class(y), "\n")
       datediffs = unique(diff(unlist(y[, c(datecol), with = F])))
       cat(datediffs, "\n")
       freq = datediffs[which.max(tabulate(match(diff(y[, c(datecol), with = F][[1]]), datediffs)))]
