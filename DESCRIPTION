@@ -8,7 +8,6 @@ Maintainer: Alex Hubbard <alex.hubbard@opendoor.com>
 Description: Decomposition model is Y = T + C + S + e where Y is the data, T is the trend, C is the cycle, S is the seasonality, and e is the observation error.
 License: GPL (>= 2)
 Imports: Rcpp (>= 1.0.0),
-  data.table (>= 1.11.4),
   ggplot2 (>= 2.2.1),
   grid (>= 3.5.0),
   gridExtra (>= 2.3),

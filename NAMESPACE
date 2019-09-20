@@ -3,3 +3,6 @@
 export(SSmodel)
 export(tcs_decomp_estim)
 export(tcs_decomp_filter)
+export(kalman_filter)
+export(kalman_smoother)
+useDynLib(TCSDecomp)
