@@ -178,7 +178,10 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
                              det_trend = F, det_seasonality = F, det_cycle = F, det_drift = F, damped_trend = F,
                              level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
   dates = NULL
-  if(is.null(freq)){
+  if(is.ts(y)){
+    dates = as.Date(time(y))
+    freq = frequency(y)
+  }else if(is.null(freq)){
     y = data.table::as.data.table(y)
     .SD = data.table::.SD
     datecol = unlist(lapply(colnames(y), function(x){
@@ -463,23 +466,36 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_decomp_filter = function(y, model, plot = F){
-  y = data.table::as.data.table(y)
-  .SD = data.table::.SD
-  datecol = unlist(lapply(colnames(y), function(x){
-    if(class(y[, c(x), with = F][[1]]) %in% c("Date")){
-      return(x)
-    }else{
-      return(NULL)
-    }
-  }))
   dates = NULL
-  if(length(datecol) == 1){
-    #Detect the frequency
-    dates = y[, datecol, with = F][[1]]
-    y = y[, colnames(y)[colnames(y) != datecol], with = F][[1]]
-    rm(datecol)
-  }else if(length(datecol) > 1){
+  if(is.ts(y)){
+    dates = as.Date(time(y))
+    freq = frequency(y)
+  }else{
+    y = data.table::as.data.table(y)
+    .SD = data.table::.SD
+    datecol = unlist(lapply(colnames(y), function(x){
+      if(class(y[, c(x), with = F][[1]]) %in% c("Date")){
+        return(x)
+      }else{
+        return(NULL)
+      }
+    }))
+    if(length(datecol) == 1) {
+      #Detect the frequency
+      if(length(datecol) > 1){
+        stop("Too many date columns. Include only 1 date column or set the frequency manually.")
+      }
+      datediffs = unique(diff(unlist(y[, c(datecol), with = F])))
+      freq = datediffs[which.max(tabulate(match(diff(y[, c(datecol), with = F][[1]]), datediffs)))]
+      freq = c(365, 52, 12, 4, 1)[which.min(abs(freq -  c(1, 7, 30, 90, 365)))]
+      dates = y[, c(datecol), with = F][[1]]
+      y = unlist(y[, colnames(y)[colnames(y) != datecol], with = F])
+      rm(datediffs, datecol)
+    }else if(length(datecol) > 1){
       stop("Too many date columns detected.")
+    }else{
+      stop("No date column detected. Include a date column or set the frequency.")
+    }
   }
   
   #Set the dates if it hasn't been given
@@ -504,6 +520,9 @@ tcs_decomp_filter = function(y, model, plot = F){
   }
   
   #Get model specifications
+  if(freq != model$table$freq){
+    warning("Frequency of data does not match that of the model. Using model frequency instead of the detected data frequency.")
+  }
   freq = model$table$freq
   decomp = model$table$decomp
   trend_spec = model$table$model
