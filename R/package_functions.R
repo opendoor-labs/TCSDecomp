@@ -1,11 +1,13 @@
+
+
 #' State space model
+#' 
 #' Creates a state space model in list form
 #' yt = Ht * Bt + e_t
 #' Bt = Ft * B_{t=1} + u_t
-#'
 #' @param par Vector of named parameter values
 #' @param yt Univariate time series of data values
-#' @param freq Seasonality of the data (1, 4, 12, 53, 365)
+#' @param freq Seasonality of the data (1, 4, 12, 52, 365)
 #' @param decomp Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")
 #' @param trend_spec Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
 #' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
@@ -42,7 +44,7 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
     #T_t = M_{t-1} + T_{t-1} + e_t, e_t ~ N(0, sig_t^2)
     #M_t = (1 - phi)*M_bar + phi*M_{t-1} + n_t, n_t ~ N(0, sig_m^2)
     #Transition matrix
-    Fm = rbind(c(1, 1/(1 + par["phi"]^2)), c(0, 1))
+    Fm = rbind(c(1, 1/(1 + par["phi"]^2)), c(0, 1)) #Constraint the trend dampening paramter phi to be between 0 and 1 (including 1)
     colnames(Fm) = c("Tt1", "Mt1")
     rownames(Fm) = c("Tt0", "Mt0")
     #Observation matrix
@@ -138,64 +140,61 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
   return(list(B0 = B0, P0 = P0, At = Am, Dt = Dm, Ht = Hm, Ft = Fm, Rt = Rm, Qt = Qm))
 }
 
-#' Trend cycle seasonal decomposition using the Kalman filter
-#
-#' Estimates a structural time series model using the Kalman filter and maximum likelihood
-#' The seasonal and cycle components are assumed to be of a trigonometric form.
-#' The function checks 4 trend specifications to decompose a univariate time series
-#' into trend, cycle, and/or seasonal components plus noise. The function automatically
-#' detects the frequency and checks for a seasonal and cycle component if the user does not specify
-#' the frequency or decomposition model. This can be turned off by setting freq or specifying decomp.
-#'
-#' State space model for decomposition
-#' Yt = T_t + C_t + S_t + e_t, e_t ~ N(0, sig_e^2)
-#' Y is the data
-#' T is the trend component
-#' C is the cycle component
-#' S is the seasonal component
-#' e is the observation error
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
-#' @param freq Seasonality of the data (1, 4, 12, 53, 365)
-#' @param decomp Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")
-#' @param trend_spec Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
-#' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
-#' @param multiplicative If data should be logged to create a multiplicative model
-#' @param optim_methods Vector of 1 to 3 optimization methods in order of preference ("NR", "BFGS", "CG", "BHHH", or "SANN")
-#' @param det_obs Set the observation equation error variance to 0 (deterministic observation equation)
-#' @param det_trend Set the trend error variance to 0 (deterministic trend)
-#' @param det_seasonality Set the seasonality error variances to 0 (deterministic seasonality)
-#' @param det_cycle Set thecycle error variance to 0 (deterministic cycle)
-#' @param det_drift Set the drift error variance to 0 (deterministic drift)
-#' @param damped_trend "rwd" trend_spec only, allow drift equation to be autoregressive 
-#' @param maxit Maximum number of iterations for the optimization
-#' @param maxtrials Maximum number of optimization trials to get convergence
-#' @return List of estimation values including coefficients, convergence code, datea frequency, decomposition used, and trend specification selected.
-#' @examples
-#' tcs_decomp_estim(y = DT[, c("date", "y")])
-#' @author Alex Hubbard (hubbard.alex@gmail.com)
-#' @export
-tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, multiplicative = NULL, det_obs = F, 
-                             det_trend = F, det_seasonality = F, det_cycle = F, det_drift = F, damped_trend = F,
-                             level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
-  dates = NULL
+#' @param freq Seasonality of the data (1, 4, 12, 52, 365)
+#' @return List giving the decomposition and periodogram
+tcs_detect_decomp = function(y, freq){
+  #Calculate a periodogram for the data
+  pgram = TSA::periodogram(imputeTS::na_kalman(y), plot = F)
+  pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
+  pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
+  pgram = pgram[period < length(y), ]
+  
+  #Calculate a periodogram for random data
+  pgram_base = TSA::periodogram(rnorm(10000), plot = F)
+  pgram_base = data.table::data.table(freq = pgram_base$freq, spec = pgram_base$spec, period = 1/pgram_base$spec)[order(-spec), ]
+  pgram_base[, `:=`("d", (spec)/mean(spec, na.rm = T))]
+  
+  #Find periods that have a significant spectral number
+  periods = pgram[which(sapply(1:nrow(pgram), function(x) {
+    nrow(pgram_base[d > pgram[x, ]$d, ])/nrow(pgram_base)
+  }) <= level), ]$period
+  pgram = pgram[, `:=`("d", NULL)][order(period), ]
+  pgram[, `:=`("significant", ifelse(period %in% periods, T, F))]
+  decomp = "trend"
+  if(length(periods) > 0){
+    #Check for seasonality using the periodogram or the unit root test on the frequency differences
+    if(freq > 1 & any(abs(periods - freq) < freq/2)){
+      decomp = paste0(decomp, "-seasonal")
+    }
+    
+    #Check for longer term cycle
+    if(any(periods > freq * 3)){
+      decomp = paste0(decomp, "-cycle")
+    }
+  }
+  if(decomp == "trend"){
+    decomp = "trend-noise"
+  }
+  rm(pgram_base, periods)
+  return(list(pgram = pgram, decomp = decomp))
+}
+
+#' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
+#' @param init_freq Initial setting for the frequency detection
+#' @return List giving the dates and frequency of the data
+tcs_detect_freq = function(y, init_freq = NULL){
   if(is.ts(y)){
+    if(is.null(ncol(y)) | ncol(y) > 1){
+      stop("Data must be a univariate time series.")
+    }
     dates = as.Date(time(y))
     freq = frequency(y)
-  }else if(is.null(freq)){
+  }else{
     y = data.table::as.data.table(y)
-    .SD = data.table::.SD
-    datecol = unlist(lapply(colnames(y), function(x){
-      if(class(y[, c(x), with = F][[1]]) %in% c("Date")){
-        return(x)
-      }else{
-        return(NULL)
-      }
-    }))
+    datecol = unlist(y[, lapply(.SD, class), .SDcols = colnames(y)])
+    datecol = datecol[datecol == "Date"]
     if(length(datecol) == 1) {
-      #Detect the frequency
-      if(length(datecol) > 1){
-        stop("Too many date columns. Include only 1 date column or set the frequency manually.")
-      }
       datediffs = unique(diff(unlist(y[, c(datecol), with = F])))
       freq = datediffs[which.max(tabulate(match(diff(y[, c(datecol), with = F][[1]]), datediffs)))]
       freq = c(365, 52, 12, 4, 1)[which.min(abs(freq -  c(1, 7, 30, 90, 365)))]
@@ -203,17 +202,65 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
       y = unlist(y[, colnames(y)[colnames(y) != datecol], with = F])
       rm(datediffs, datecol)
     }else if(length(datecol) > 1){
-      stop("Too many date columns detected.")
-    }else{
+      stop("Too many date columns. Include only 1 date column or set the frequency manually.")
+    }else if(length(datecol) == 0 & is.null(freq)){
       stop("No date column detected. Include a date column or set the frequency.")
-    }
-  }else{
-    if(!is.numeric(freq)){
-      stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
-    }else if(!freq %in% c(1, 4, 12, 52, 365)){
-      stop("Must provide freq as numeric (1 for annual, 4 for quarterly, 12 for monthly, 52 for weekly, 365 for daily).")
+    }else{
+      dates = 1:length(y)
     }
   }
+  return(list(dates = dates, freq = freq))
+}
+
+#' Trend cycle seasonal decomposition using the Kalman filter
+#' 
+#' Estimates a structural time series model using the Kalman filter and maximum likelihood
+#' The seasonal and cycle components are assumed to be of a trigonometric form.
+#' The function checks 4 trend specifications to decompose a univariate time series
+#' into trend, cycle, and/or seasonal components plus noise. The function automatically
+#' detects the frequency and checks for a seasonal and cycle component if the user does not specify
+#' the frequency or decomposition model. This can be turned off by setting freq or specifying decomp.
+#' State space model for decomposition follows
+#' Yt = T_t + C_t + S_t + e_t, e_t ~ N(0, sig_e^2)
+#' Y is the data
+#' T is the trend component
+#' C is the cycle component
+#' S is the seasonal component
+#' e is the observation error
+#' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
+#' @param freq Seasonality of the data (1, 4, 12, 52, 365)
+#' @param decomp Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")
+#' @param trend_spec Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
+#' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
+#' @param multiplicative If data should be logged to create a multiplicative model
+#' @param optim_methods Vector of 1 to 3 optimization methods in order of preference ("NR", "BFGS", "CG", "BHHH", or "SANN")
+#' @param det_obs Set the observation equation error variance to 0 (deterministic observation equation)
+#' @param det_trend Set the trend error variance to 0 (deterministic trend)
+#' @param det_seas Set the seasonality error variances to 0 (deterministic seasonality)
+#' @param det_cycle Set thecycle error variance to 0 (deterministic cycle)
+#' @param det_drift Set the drift error variance to 0 (deterministic drift)
+#' @param maxit Maximum number of iterations for the optimization
+#' @param maxtrials Maximum number of optimization trials to get convergence
+#' @return List of estimation values including coefficients, convergence code, datea frequency, decomposition used, and trend specification selected.
+#' @examples
+#' tcs_decomp_estim(y = DT[, c("date", "y")])
+#' If multiplicative = T, then the data is logged and the original model becomes multiplicative (Y_t = T_t * C_t * S_t * e_t)
+#' If trend is "rw", the trend model is T_t = T_{t-1} + e_t, e_t ~ N(0, sig_t^2)
+#' If trend is "rwd", the trend model is T_t = M_{t-1} + T_{t-1} + e_t, e_t ~ N(0, sig_t^2) with 
+#'      M_t = (1 - phi)*M_bar + phi*M_{t-1} + n_t, n_t ~ N(0, sig_m^2) where
+#'      phi is the dampening parameter and M_bar the mean of the drift. 
+#' If trend is "2rw", the trend model is T_t = 2T_{t-1} - T_{t-2} + e_t, e_t ~ N(0, sig_t^2)
+#' If det_obs = T then sig_e is set to 0 
+#' If det_trend = T then the variacne of the trend (sig_t) is set to 0 and is referred to as a smooth trend
+#' If det_drift = T then the variance of the drift (sig_m) is set to 0 and is refereed to as a deterministic drift
+#' If det_seas = T then the variance all seasonality frequencies j (sig_j) are set to 0 and is referred to as deterministic seasonality
+#' If det_cycle = T then the variance of the cyclce (sig_c) is set to 0 and is refreed to as a deterministic cycle
+#' @author Alex Hubbard (hubbard.alex@gmail.com)
+#' @export
+tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, multiplicative = NULL, det_obs = F, 
+                             det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
+                             level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
+  
   if(level < 0.01 | level > 0.1){
     stop("level must be between 0.01 and 0.1.")
   }
@@ -230,10 +277,13 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   }else if(maxtrials <= 0){
     stop("maxtrials must be numeric and greater than 0.")
   }
+  
+  #Get the frequency of the data
+  freq = tcs_detect_freq(y, init_freq = freq)$freq
+  
   #Remove leading and trailing NAs
   range = which(!is.na(y))
   y = unname(y[range[1]:range[length(range)]])
-  dates = dates[range[1]:range[length(range)]]
   
   if(is.null(multiplicative)){
     if(all(y > 0)){
@@ -251,40 +301,9 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   
   #Set the decomposition
   if(is.null(decomp)){
-    #Calculate a periodogram for the data
-    pgram = TSA::periodogram(imputeTS::na_kalman(y), plot = F)
-    pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
-    pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
-    pgram = pgram[period < length(y), ]
-
-    #Calculate a periodogram for random data
-    pgram_base = TSA::periodogram(rnorm(10000), plot = F)
-    pgram_base = data.table::data.table(freq = pgram_base$freq, spec = pgram_base$spec, period = 1/pgram_base$spec)[order(-spec), ]
-    pgram_base[, `:=`("d", (spec)/mean(spec, na.rm = T))]
-
-    #Find periods that have a significant spectral number
-    periods = pgram[which(sapply(1:nrow(pgram), function(x) {
-      nrow(pgram_base[d > pgram[x, ]$d, ])/nrow(pgram_base)
-    }) <= level), ]$period
-    pgram = pgram[, `:=`("d", NULL)][order(period), ]
-    pgram[, `:=`("significant", ifelse(period %in% periods,
-                                       T, F))]
-    decomp = "trend"
-    if(length(periods) > 0){
-      #Check for seasonality using the periodogram or the unit root test on the frequency differences
-      if(freq > 1 & any(abs(periods - freq) < freq/2)){
-        decomp = paste0(decomp, "-seasonal")
-      }
-
-      #Check for longer term cycle
-      if(any(periods > freq * 3)){
-        decomp = paste0(decomp, "-cycle")
-      }
-    }
-    if(decomp == "trend"){
-      decomp = "trend-noise"
-    }
-    rm(pgram_base, periods)
+    decomp = tcs_detect_decomp(y, freq)
+    pgram = decomp$pgram
+    decomp = decomp$decomp
   }
 
   #Define the trend specifications to estiamte
@@ -297,14 +316,13 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     iter = trend_spec
   }
 
-  comb = function(DT1, DT2) {
-    return(rbind(DT1, DT2, use.names = T, fill = T))
-  }
+  #Set parallel options
   cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
   doSNOW::registerDoSNOW(cl)
   invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
   `%fun%` = foreach::`%dopar%`
-  fit = foreach::foreach(i = iter, .combine = "comb", .packages = c("data.table", "Matrix", "maxLik", "imputeTS", "TCSDecomp"), .export = c("SSmodel", "kalman_filter", "kalman_smoother")) %fun% {
+  fit = foreach::foreach(i = iter, .combine = function(DT1, DT2){rbind(DT1, DT2, use.names = T, fill = T)}, 
+                         .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel", "kalman_filter", "kalman_smoother")) %fun% {
     #Set up the initial values
     if(i == "rw"){
       par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
@@ -343,7 +361,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
       par["sig_t"] = 0
       fixed = c(fixed, "sig_t")
     }
-    if(det_seasonality == T){
+    if(det_seas == T){
       par[grepl("sig_j", names(par))] = 0
       fixed = c(fixed, names(par)[grepl("sig_j", names(par))])
     }
@@ -354,9 +372,6 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     if(det_drift == T){
       par["sig_m"] = 0
       fixed = c(fixed, "sig_m")
-    }
-    if(damped_trend == T){
-      fixed = c(fixed, "phi", "m_bar")
     }
 
     #Define the objective function
@@ -445,7 +460,6 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   snow::stopCluster(cl)
   
   #Select the best model based on the maximum likelihood
-  model_selection = fit[loglik == max(loglik, na.rm = T), ]$model
   fit = fit[loglik == max(loglik, na.rm = T), ]
   fit = list(table = fit)
   if(exists("pgram")){
@@ -457,6 +471,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 }
 
 #' Kalman filter an estimated model from tcs_decomp_estim
+#' 
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
 #' @param model Structural time series model estimated using tcs_decomp_estim.
 #' @param plot Logial, whether to plot the output or not.
@@ -466,37 +481,11 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_decomp_filter = function(y, model, plot = F){
-  dates = NULL
-  if(is.ts(y)){
-    dates = as.Date(time(y))
-    freq = frequency(y)
-  }else{
-    y = data.table::as.data.table(y)
-    .SD = data.table::.SD
-    datecol = unlist(lapply(colnames(y), function(x){
-      if(class(y[, c(x), with = F][[1]]) %in% c("Date")){
-        return(x)
-      }else{
-        return(NULL)
-      }
-    }))
-    if(length(datecol) == 1) {
-      #Detect the frequency
-      if(length(datecol) > 1){
-        stop("Too many date columns. Include only 1 date column or set the frequency manually.")
-      }
-      datediffs = unique(diff(unlist(y[, c(datecol), with = F])))
-      freq = datediffs[which.max(tabulate(match(diff(y[, c(datecol), with = F][[1]]), datediffs)))]
-      freq = c(365, 52, 12, 4, 1)[which.min(abs(freq -  c(1, 7, 30, 90, 365)))]
-      dates = y[, c(datecol), with = F][[1]]
-      y = unlist(y[, colnames(y)[colnames(y) != datecol], with = F])
-      rm(datediffs, datecol)
-    }else if(length(datecol) > 1){
-      stop("Too many date columns detected.")
-    }else{
-      stop("No date column detected. Include a date column or set the frequency.")
-    }
-  }
+  
+  #Get the dates and frequency of the data
+  freq = tcs_detect_freq(y)
+  dates = freq$dates
+  freq = freq$freq
   
   #Set the dates if it hasn't been given
   if(is.null(dates)){
@@ -508,7 +497,7 @@ tcs_decomp_filter = function(y, model, plot = F){
   y = unname(y[range[1]:range[length(range)]])
   dates = dates[range[1]:range[length(range)]]
   
-  if(mod$table$multiplicative == T){
+  if(model$table$multiplicative == T){
     y = log(y)
   }
   
