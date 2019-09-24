@@ -614,7 +614,10 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
   final = rbind(data.table(method = "filter", date = dates, preret[["filter"]]), 
                 data.table(method = "smooth", date = dates, preret[["smooth"]]), 
                 use.names = T, fill = T)
-  
+  if(model$table$multiplicative == T){
+    final[, c(colnames(final)[!colnames(final) %in% c("method", "date")]) := lapply(.SD, exp), 
+          .SDcols = c(colnames(final)[!colnames(final) %in% c("method", "date")])]
+  }
   if(plot == T) {
     for(i in c("filter", "smooth")){
       g1 = ggplot2::ggplot(data.table::melt(final[method == i, ], id.vars = "date", measure.vars = c("y", "trend"))) + 
