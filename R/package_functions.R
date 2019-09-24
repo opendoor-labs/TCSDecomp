@@ -149,7 +149,7 @@ tcs_detect_decomp = function(y, freq, level){
   decomp = "trend"
   
   #Test for seasonality and long-term cycle
-  capture.output(wave <- WaveletComp::analyze.wavelet(data.frame(y), method = "ARIMA", n.sim = 100, verbose = F))
+  capture.output(wave <- WaveletComp::analyze.wavelet(data.frame(y), method = "ARIMA", n.sim = 1000, verbose = F))
   wave = data.table::data.table(period = wave$Period, power = wave$Power.avg, pval = wave$Power.avg.pval)
   wave[, "period" := round(period)]
   wave = wave[, .(power = mean(power, na.rm = T), pval = mean(pval, na.rm = T)), by = "period"]
