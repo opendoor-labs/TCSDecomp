@@ -515,7 +515,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 tcs_decomp_filter = function(y, model, plot = F, verbose = F){
   
   #Get the dates and frequency of the data
-  y = tcs_detect_freq(ts(y, frequency = 12), model$freq)
+  y = tcs_detect_freq(y, model$freq)
   dates = y$dates
   freq = y$freq
   y = y$data
@@ -525,6 +525,7 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
   y = unname(y[range[1]:range[length(range)]])
   dates = dates[range[1]:range[length(range)]]
   
+  #Apply multiplicative model
   if(model$table$multiplicative == T){
     y = log(y)
   }
