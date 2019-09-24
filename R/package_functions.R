@@ -614,14 +614,12 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
   final = rbind(data.table(method = "filter", date = dates, preret[["filter"]]), 
                 data.table(method = "smooth", date = dates, preret[["smooth"]]), 
                 use.names = T, fill = T)
-  if(model$table$multiplicative == T){
-    final[, c(colnames(final)[!colnames(final) %in% c("method", "date")]) := lapply(.SD, exp), 
-          .SDcols = c(colnames(final)[!colnames(final) %in% c("method", "date")])]
-  }
   if(plot == T) {
     for(i in c("filter", "smooth")){
       g1 = ggplot2::ggplot(data.table::melt(final[method == i, ], id.vars = "date", measure.vars = c("y", "trend"))) + 
-        ggplot2::ggtitle("Actual vs Trend") + 
+        ggplot2::ggtitle("Actual vs Trend") +
+        ggplot2::scale_x_continuous("Date") +
+        ggplot2::scale_y_continuous(paste0("Value", ifelse(model$table$multiplicative == T, " (log)", ""))) +
         ggplot2::geom_line(ggplot2::aes(x = date, y = value, group = variable, color = variable)) + ggplot2::theme_minimal() + 
         ggplot2::guides(color = ggplot2::guide_legend(title = NULL)) + 
         ggplot2::theme(legend.position = "bottom")
@@ -629,6 +627,8 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
       title = title[title != ""]
       g2 = ggplot2::ggplot(data.table::melt(final[method == i, ], id.vars = "date", measure.vars = c("cycle", "seasonal", "observation_error"))) + 
         ggplot2::ggtitle(paste(title, collapse = ", ")) + 
+        ggplot2::scale_x_continuous("Date") +
+        ggplot2::scale_y_continuous(paste0("Value", ifelse(model$table$multiplicative == T, " (log)", ""))) +
         ggplot2::geom_line(ggplot2::aes(x = date, y = value, group = variable, color = variable)) + 
         ggplot2::theme_minimal() + ggplot2::guides(color = ggplot2::guide_legend(title = NULL)) + 
         ggplot2::theme(legend.position = "bottom")
@@ -647,6 +647,11 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
     }
   }
   snow::stopCluster(cl)
+  
+  if(model$table$multiplicative == T){
+    final[, c(colnames(final)[!colnames(final) %in% c("method", "date")]) := lapply(.SD, exp), 
+          .SDcols = c(colnames(final)[!colnames(final) %in% c("method", "date")])]
+  }
   return(final)
 }
 
