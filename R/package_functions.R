@@ -618,8 +618,8 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
     for(i in c("filter", "smooth")){
       g1 = ggplot2::ggplot(data.table::melt(final[method == i, ], id.vars = "date", measure.vars = c("y", "trend"))) + 
         ggplot2::ggtitle("Actual vs Trend") +
-        ggplot2::scale_x_continuous("Date") +
-        ggplot2::scale_y_continuous(paste0("Value", ifelse(model$table$multiplicative == T, " (log)", ""))) +
+        ggplot2::scale_x_date(name = "Date") +
+        ggplot2::scale_y_continuous(name = paste0("Value", ifelse(model$table$multiplicative == T, " (log)", ""))) +
         ggplot2::geom_line(ggplot2::aes(x = date, y = value, group = variable, color = variable)) + ggplot2::theme_minimal() + 
         ggplot2::guides(color = ggplot2::guide_legend(title = NULL)) + 
         ggplot2::theme(legend.position = "bottom")
@@ -627,14 +627,14 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
       title = title[title != ""]
       g2 = ggplot2::ggplot(data.table::melt(final[method == i, ], id.vars = "date", measure.vars = c("cycle", "seasonal", "observation_error"))) + 
         ggplot2::ggtitle(paste(title, collapse = ", ")) + 
-        ggplot2::scale_x_continuous("Date") +
+        ggplot2::scale_x_date(name = "Date") +
         ggplot2::scale_y_continuous(paste0("Value", ifelse(model$table$multiplicative == T, " (log)", ""))) +
         ggplot2::geom_line(ggplot2::aes(x = date, y = value, group = variable, color = variable)) + 
         ggplot2::theme_minimal() + ggplot2::guides(color = ggplot2::guide_legend(title = NULL)) + 
         ggplot2::theme(legend.position = "bottom")
       if(!all(is.na(model[["wavelet"]]))){
         g3 = ggplot2::ggplot(model[["wavelet"]]) + 
-          ggplot2::ggtitle("Wavelet Power") + ggplot2::scale_x_continuous("Period") + ggplot2::scale_y_continuous("Power") + 
+          ggplot2::ggtitle("Wavelet Power") + ggplot2::scale_x_continuous(name = "Period") + ggplot2::scale_y_continuous(name = "Power") + 
           ggplot2::geom_col(ggplot2::aes(x = period, y = power, fill = `Significant Frequencies`, color = `Significant Frequencies`), 
                             position = "dodge", width = 0.75) + 
           ggplot2::theme_minimal() + ggplot2::guides(color = F) + 
