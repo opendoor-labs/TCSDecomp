@@ -264,7 +264,7 @@ tcs_detect_freq = function(y, freq = NULL){
 #' @export
 tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, multiplicative = NULL, det_obs = F, 
                              det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
-                             wavelet.method = "ARIMA", n.sim = 500, 
+                             wavelet.method = "ARIMA", wavelet.sim = 100, 
                              level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
   
   if(level < 0.01 | level > 0.1){
@@ -296,10 +296,11 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   #Check for a multiplicative model
   if(is.null(multiplicative)){
     if(all(y > 0)){
-      test = lmtest::gqtest(y ~ t,  data = data.frame(y = y, t = 1:length(y)))
-    }
-    if(test$p.value <= level){
-      multiplicative = T
+      if(lmtest::gqtest(y ~ t,  data = data.frame(y = y, t = 1:length(y)))$p.value <= level){
+        multiplicative = T
+      }else{
+        multiplicative = F
+      }
     }else{
       multiplicative = F
     }
@@ -400,8 +401,13 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     #Get initial values for Kalman Filter
     sp = SSmodel(par, y, freq, decomp, trend_spec = i)
     init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
-    init = kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft)
-    init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
+    init2 = tryCatch(kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft), 
+                    error = function(err){NULL})
+    if(is.null(init)){
+      init = list(B0 = sp$B0, P0 = init$P0) 
+    }else{
+      init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
+    }
   
     #Find anhy na values
     if(any(is.na(y))){
@@ -493,7 +499,7 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
   
   #Get the dates and frequency of the data
   y = tcs_detect_freq(y, model$freq)
-  dates = y$dates
+  dates = as.Date(y$dates)
   freq = y$freq
   y = y$data
   
@@ -613,7 +619,7 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
   #Combine the filtered and smoothed series
   final = rbind(data.table(method = "filter", date = dates, preret[["filter"]]), 
                 data.table(method = "smooth", date = dates, preret[["smooth"]]), 
-                use.names = T, fill = T)
+                use.names = T, fill = T)[, "date" := as.Date(date)]
   if(plot == T) {
     for(i in c("filter", "smooth")){
       g1 = ggplot2::ggplot(data.table::melt(final[method == i, ], id.vars = "date", measure.vars = c("y", "trend"))) + 
