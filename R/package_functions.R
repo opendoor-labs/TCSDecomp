@@ -144,9 +144,9 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
 #' @param freq Seasonality of the data (1, 4, 12, 52, 365)
 #' @return List giving the decomposition and wavelet
 #' @param method Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".
-#' @param n.sim Number of simulations for wavelet analysis. Default is 500
+#' @param n.sim Number of simulations for wavelet analysis. Default is 100
 #' @export
-tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 500){
+tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 100){
   #Set the baseline decomposition
   decomp = "trend"
   
@@ -245,7 +245,7 @@ tcs_detect_freq = function(y, init_freq = NULL){
 #' @param maxit Maximum number of iterations for the optimization
 #' @param maxtrials Maximum number of optimization trials to get convergence
 #' @param wavelet.method Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".
-#' @param wavelet.sim Number of simulations for wavelet analysis. Default is 500
+#' @param wavelet.sim Number of simulations for wavelet analysis. Default is 100
 #' @return List of estimation values including coefficients, convergence code, datea frequency, decomposition used, and trend specification selected.
 #' @examples
 #' tcs_decomp_estim(y = DT[, c("date", "y")])
