@@ -343,7 +343,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   `%fun%` = foreach::`%dopar%`
   if(verbose == T){
     cat("Performing trend model selection...\n")
-    pb = txtProgressBar(min = 0, max = length(roll_dates), initial = 0, style = 3, char = "=")
+    pb = txtProgressBar(min = 0, max = length(iter), initial = 0, style = 3, char = "=")
     progress = function(n){setTxtProgressBar(pb, n)}
   }else{
     progress = NULL
@@ -566,14 +566,14 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
   rownames(smooth) = rownames(ans$B_tt)
   
   #Retrieve the model output
+  iter = c("filter", "smooth")
   if(verbose == T){
     cat("Performing filtering and smoothing...\n")
-    pb = txtProgressBar(min = 0, max = length(roll_dates), initial = 0, style = 3, char = "=")
+    pb = txtProgressBar(min = 0, max = length(iter), initial = 0, style = 3, char = "=")
     progress = function(n){setTxtProgressBar(pb, n)}
   }else{
     progress = NULL
   }
-  iter = c("filter", "smooth")
   cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
   doSNOW::registerDoSNOW(cl)
   invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
