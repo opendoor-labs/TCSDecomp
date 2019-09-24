@@ -145,19 +145,13 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
 #' @return List giving the decomposition and wavelet
 #' @param method Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".
 #' @param n.sim Number of simulations for wavelet analysis. Default is 500
-#' @param verbose To display progress or not
 #' @export
-tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 500, verbose = F){
+tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 500){
   #Set the baseline decomposition
   decomp = "trend"
   
   #Test for seasonality and long-term cycle
-  if(verbose == T){
-    cat("Performing wavelet analysis...\n")
-    wave = WaveletComp::analyze.wavelet(data.frame(y), method = method, n.sim = n.sim, verbose = F)
-  }else{
-    capture.output(wave <- WaveletComp::analyze.wavelet(data.frame(y), method = "ARIMA", n.sim = 500, verbose = F))
-  }
+  capture.output(wave <- WaveletComp::analyze.wavelet(data.frame(y), method = "ARIMA", n.sim = 500, verbose = F))
   wave = data.table::data.table(period = wave$Period, power = wave$Power.avg, pval = wave$Power.avg.pval)
   wave[, "period" := round(period)]
   wave = wave[, .(power = mean(power, na.rm = T), pval = mean(pval, na.rm = T)), by = "period"]
@@ -185,9 +179,6 @@ tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 50
     decomp = "trend-noise"
   }
   
-  if(verbose == T){
-    cat("\nDone.\n")
-  }
   return(list(wave = wave, decomp = decomp))
 }
 
@@ -253,9 +244,8 @@ tcs_detect_freq = function(y, init_freq = NULL){
 #' @param det_drift Set the drift error variance to 0 (deterministic drift)
 #' @param maxit Maximum number of iterations for the optimization
 #' @param maxtrials Maximum number of optimization trials to get convergence
-#' @param verbose To display progress or not
-#' @param method Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".
-#' @param n.sim Number of simulations for wavelet analysis. Default is 500
+#' @param wavelet.method Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".
+#' @param wavelet.sim Number of simulations for wavelet analysis. Default is 500
 #' @return List of estimation values including coefficients, convergence code, datea frequency, decomposition used, and trend specification selected.
 #' @examples
 #' tcs_decomp_estim(y = DT[, c("date", "y")])
@@ -273,8 +263,8 @@ tcs_detect_freq = function(y, init_freq = NULL){
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, multiplicative = NULL, det_obs = F, 
-                             det_trend = F, det_seas = F, det_cycle = F, det_drift = F, verbose = F, 
-                             method = "ARIMA", n.sim = 500, 
+                             det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
+                             wavelet.method = "ARIMA", n.sim = 500, 
                              level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
   
   if(level < 0.01 | level > 0.1){
@@ -320,7 +310,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   
   #Set the decomposition
   if(is.null(decomp)){
-    decomp = tcs_detect_decomp(y, freq, level, verbose)
+    decomp = tcs_detect_decomp(y, freq, level, wavelet.method, wavelet.sim)
     wave = decomp$wave
     decomp = decomp$decomp
   }
@@ -340,16 +330,8 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   doSNOW::registerDoSNOW(cl)
   invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
   `%fun%` = foreach::`%dopar%`
-  if(verbose == T){
-    cat("Performing trend model selection...\n")
-    pb = txtProgressBar(min = 0, max = length(iter), initial = 0, style = 3, char = "=")
-    progress = function(n){setTxtProgressBar(pb, n)}
-  }else{
-    progress = NULL
-  }
   fit = foreach::foreach(i = iter, .combine = function(DT1, DT2){rbind(DT1, DT2, use.names = T, fill = T)}, 
-                         .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel", "kalman_filter", "kalman_smoother"),
-                         .options.snow = list(progress)) %fun% {
+                         .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("SSmodel", "kalman_filter", "kalman_smoother")) %fun% {
     #Set up the initial values
     if(i == "rw"){
       par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
@@ -485,10 +467,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     }
   }
   snow::stopCluster(cl)
-  if(verbose == T){
-    cat("\nDone.\n")
-  }
-  
+
   #Select the best model based on the maximum likelihood
   fit = fit[loglik == max(loglik, na.rm = T), ]
   fit = list(table = fit)
@@ -505,7 +484,6 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
 #' @param model Structural time series model estimated using tcs_decomp_estim.
 #' @param plot Logial, whether to plot the output or not.
-#' @param verbose To display progress or not
 #' @return List of data tables containing the filtered and smoothed series.
 #' @examples
 #' tcs_decomp_filter(y = DT[, c("date", "y")], model = model)
@@ -567,18 +545,11 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
   
   #Retrieve the model output
   iter = c("filter", "smooth")
-  if(verbose == T){
-    cat("Performing filtering and smoothing...\n")
-    pb = txtProgressBar(min = 0, max = length(iter), initial = 0, style = 3, char = "=")
-    progress = function(n){setTxtProgressBar(pb, n)}
-  }else{
-    progress = NULL
-  }
   cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
   doSNOW::registerDoSNOW(cl)
   invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
   `%fun%` = foreach::`%dopar%`
-  preret = foreach::foreach(i = iter, .packages = c("data.table"), .options.snow = list(progress)) %fun% {
+  preret = foreach::foreach(i = iter, .packages = c("data.table")) %fun% {
     if(i == "filter"){
       B_tt = ans$B_tt
     }
@@ -638,9 +609,6 @@ tcs_decomp_filter = function(y, model, plot = F, verbose = F){
     return(toret)
   }
   names(preret) = iter
-  if(verbose == T){
-    cat("Done.\n")
-  }
   
   #Combine the filtered and smoothed series
   final = rbind(data.table(method = "filter", date = dates, preret[["filter"]]), 
