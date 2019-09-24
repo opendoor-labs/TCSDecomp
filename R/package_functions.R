@@ -143,6 +143,7 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
 #' @param freq Seasonality of the data (1, 4, 12, 52, 365)
 #' @return List giving the decomposition and periodogram
+#' @export
 tcs_detect_decomp = function(y, freq, level){
   #Set the baseline decomposition
   decomp = "trend"
@@ -189,6 +190,7 @@ tcs_detect_decomp = function(y, freq, level){
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
 #' @param init_freq Initial setting for the frequency detection
 #' @return List giving the dates and frequency of the data
+#' @export
 tcs_detect_freq = function(y, init_freq = NULL){
   if(is.ts(y)){
     if(ifelse(is.null(ncol(y)), F, ncol(y) > 1)){
