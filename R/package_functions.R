@@ -143,29 +143,25 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
 #' @param freq Seasonality of the data (1, 4, 12, 52, 365)
 #' @return List giving the decomposition and periodogram
-tcs_detect_decomp = function(y, freq){
-  #Calculate a periodogram for the data
-  pgram = TSA::periodogram(imputeTS::na_kalman(y), plot = F)
-  pgram = data.table::data.table(freq = pgram$freq, spec = pgram$spec, period = 1/pgram$freq)[order(-spec), ]
-  pgram[, `:=`("d", (spec)/mean(spec, na.rm = T))]
-  pgram = pgram[period < length(y), ]
-  
-  #Calculate a periodogram for random data
-  pgram_base = TSA::periodogram(rnorm(10000), plot = F)
-  pgram_base = data.table::data.table(freq = pgram_base$freq, spec = pgram_base$spec, period = 1/pgram_base$spec)[order(-spec), ]
-  pgram_base[, `:=`("d", (spec)/mean(spec, na.rm = T))]
-  
-  #Find periods that have a significant spectral number
-  periods = pgram[which(sapply(1:nrow(pgram), function(x) {
-    nrow(pgram_base[d > pgram[x, ]$d, ])/nrow(pgram_base)
-  }) <= level), ]$period
-  pgram = pgram[, `:=`("d", NULL)][order(period), ]
-  pgram[, `:=`("significant", ifelse(period %in% periods, T, F))]
+tcs_detect_decomp = function(y, freq, level){
+  #Set the baseline decomposition
   decomp = "trend"
+  
+  #Test for seasonality and long-term cycle
+  capture.output(wave <- WaveletComp::analyze.wavelet(data.frame(y), method = "ARIMA", n.sim = 100, verbose = F))
+  wave = data.table::data.table(period = wave$Period, power = wave$Power.avg, pval = wave$Power.avg.pval)
+  wave[, "period" := round(period)]
+  wave = wave[, .(power = mean(power, na.rm = T), pval = mean(pval, na.rm = T)), by = "period"]
+  wave[, "slope" := (shift(power, type = "lead", n = 1) - shift(power, type = "lag"))/(shift(period, type = "lead", n = 1) - shift(period, type = "lag", n = 1))]
+  periods = wave[pval <= level, ][(shift(power, type = "lag", n = 1) <= power & shift(power, type = "lead", n = 1) <= power) & 
+                            (shift(sign(slope), type = "lag", n = 1) == 1 & shift(sign(slope), type = "lead", n = 1) == -1), ]$period
+  
   if(length(periods) > 0){
-    #Check for seasonality using the periodogram or the unit root test on the frequency differences
-    if(freq > 1 & any(abs(periods - freq) < freq/2)){
-      decomp = paste0(decomp, "-seasonal")
+    #Check for seasonality
+    if(freq > 1){
+      if(any(abs(periods - freq) < freq/2) | seastests::wo(ts(y, frequency = freq))$stat == T){
+        decomp = paste0(decomp, "-seasonal")
+      }
     }
     
     #Check for longer term cycle
@@ -173,10 +169,20 @@ tcs_detect_decomp = function(y, freq){
       decomp = paste0(decomp, "-cycle")
     }
   }
+  
+  #If no seasonality or cycle detected, include noise component only
   if(decomp == "trend"){
     decomp = "trend-noise"
   }
-  rm(pgram_base, periods)
+  
+  pgram = ggplot(wave) + 
+    ggtitle("Wavelet Power") + scale_x_continuous("Period") + scale_y_continuous("Power") +
+    geom_line(aes(x = period, y = power)) + 
+    geom_point(data = wave[pval <= level, ][(shift(power, type = "lag", n = 1) <= power & shift(power, type = "lead", n = 1) <= power) & 
+                                              (shift(sign(slope), type = "lag", n = 1) == 1 & shift(sign(slope), type = "lead", n = 1) == -1), ], 
+               aes(x = period, y = power)) + 
+    theme_minimal()
+  
   return(list(pgram = pgram, decomp = decomp))
 }
 
@@ -185,15 +191,15 @@ tcs_detect_decomp = function(y, freq){
 #' @return List giving the dates and frequency of the data
 tcs_detect_freq = function(y, init_freq = NULL){
   if(is.ts(y)){
-    if(is.null(ncol(y)) | ncol(y) > 1){
+    if(ifelse(is.null(ncol(y)), F, ncol(y) > 1)){
       stop("Data must be a univariate time series.")
     }
-    dates = as.Date(time(y))
+    dates = time(y)
     freq = frequency(y)
   }else{
     y = data.table::as.data.table(y)
     datecol = unlist(y[, lapply(.SD, class), .SDcols = colnames(y)])
-    datecol = datecol[datecol == "Date"]
+    datecol = names(datecol[datecol == "Date"])
     if(length(datecol) == 1) {
       datediffs = unique(diff(unlist(y[, c(datecol), with = F])))
       freq = datediffs[which.max(tabulate(match(diff(y[, c(datecol), with = F][[1]]), datediffs)))]
@@ -203,13 +209,13 @@ tcs_detect_freq = function(y, init_freq = NULL){
       rm(datediffs, datecol)
     }else if(length(datecol) > 1){
       stop("Too many date columns. Include only 1 date column or set the frequency manually.")
-    }else if(length(datecol) == 0 & is.null(freq)){
+    }else if(length(datecol) == 0 & is.null(init_freq)){
       stop("No date column detected. Include a date column or set the frequency.")
     }else{
       dates = 1:length(y)
     }
   }
-  return(list(dates = dates, freq = freq))
+  return(list(data = y, dates = dates, freq = freq))
 }
 
 #' Trend cycle seasonal decomposition using the Kalman filter
@@ -279,12 +285,15 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   }
   
   #Get the frequency of the data
-  freq = tcs_detect_freq(y, init_freq = freq)$freq
+  y = tcs_detect_freq(y, freq)
+  freq = y$freq
+  y = y$data
   
   #Remove leading and trailing NAs
   range = which(!is.na(y))
   y = unname(y[range[1]:range[length(range)]])
   
+  #Check for a multiplicative model
   if(is.null(multiplicative)){
     if(all(y > 0)){
       test = lmtest::gqtest(y ~ t,  data = data.frame(y = y, t = 1:length(y)))
@@ -301,11 +310,11 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   
   #Set the decomposition
   if(is.null(decomp)){
-    decomp = tcs_detect_decomp(y, freq)
+    decomp = tcs_detect_decomp(y, freq, level)
     pgram = decomp$pgram
     decomp = decomp$decomp
   }
-
+  
   #Define the trend specifications to estiamte
   if(is.null(trend_spec)) {
     iter = c("rw", "rwd", "2rw")
@@ -483,14 +492,10 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 tcs_decomp_filter = function(y, model, plot = F){
   
   #Get the dates and frequency of the data
-  freq = tcs_detect_freq(y)
-  dates = freq$dates
-  freq = freq$freq
-  
-  #Set the dates if it hasn't been given
-  if(is.null(dates)){
-    dates = 1:length(y)
-  }
+  y = tcs_detect_freq(ts(y, frequency = 12), model$freq)
+  dates = y$dates
+  freq = y$freq
+  y = y$data
   
   #Remove leading and trailing NAs
   range = which(!is.na(y))
@@ -511,8 +516,8 @@ tcs_decomp_filter = function(y, model, plot = F){
   #Get model specifications
   if(freq != model$table$freq){
     warning("Frequency of data does not match that of the model. Using model frequency instead of the detected data frequency.")
+    freq = model$table$freq
   }
-  freq = model$table$freq
   decomp = model$table$decomp
   trend_spec = model$table$model
   
