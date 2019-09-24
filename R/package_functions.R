@@ -190,7 +190,7 @@ tcs_detect_decomp = function(y, freq, level = 0.01, verbose = F){
                aes(x = period, y = power)) + 
     theme_minimal()
   if(verbose == T){
-    cat("Done.\n")
+    cat("\nDone.\n")
   }
   return(list(pgram = pgram, decomp = decomp))
 }
@@ -487,7 +487,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   }
   snow::stopCluster(cl)
   if(verbose == T){
-    cat("Done.\n")
+    cat("\nDone.\n")
   }
   
   #Select the best model based on the maximum likelihood
