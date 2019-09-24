@@ -183,10 +183,10 @@ tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 10
 }
 
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
-#' @param init_freq Initial setting for the frequency detection
+#' @param freq Initial setting for the frequency detection
 #' @return List giving the dates and frequency of the data
 #' @export
-tcs_detect_freq = function(y, init_freq = NULL){
+tcs_detect_freq = function(y, freq = NULL){
   if(is.ts(y)){
     if(ifelse(is.null(ncol(y)), F, ncol(y) > 1)){
       stop("Data must be a univariate time series.")
@@ -206,7 +206,7 @@ tcs_detect_freq = function(y, init_freq = NULL){
       rm(datediffs, datecol)
     }else if(length(datecol) > 1){
       stop("Too many date columns. Include only 1 date column or set the frequency manually.")
-    }else if(length(datecol) == 0 & is.null(init_freq)){
+    }else if(length(datecol) == 0 & is.null(freq)){
       stop("No date column detected. Include a date column or set the frequency.")
     }else{
       dates = 1:length(y)
