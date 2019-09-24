@@ -20,8 +20,8 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
   
   #Define the standard deviation of the observation equation
   if(decomp == "trend-noise") {
-    sig_e = ifelse(trend_spec == "rw", sd(diff(t(yt))), 
-                   ifelse(trend_spec %in% c("rwd", "2rw"), sd(diff(diff(t(yt))))))
+    sig_e = ifelse(trend_spec == "rw", sd(diff(t(yt)), na.rm = T), 
+                   ifelse(trend_spec %in% c("rwd", "2rw"), sd(diff(diff(t(yt))), na.rm = T)))
   }else if(decomp %in% c("trend-cycle", "trend-seasonal", "trend-cycle-seasonal", "trend-seasonal-cycle")) {
     sig_e = par["sig_e"]
   }else {
@@ -40,9 +40,9 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
     colnames(Hm) = rownames(Fm)
   }else if(trend_spec == "rwd"){
     #T_t = M_{t-1} + T_{t-1} + e_t, e_t ~ N(0, sig_t^2)
-    #M_t = M_{t-1} + n_t, n_t ~ N(0, sig_m^2)
+    #M_t = (1 - phi)*M_bar + phi*M_{t-1} + n_t, n_t ~ N(0, sig_m^2)
     #Transition matrix
-    Fm = rbind(c(1, 1), c(0, 1))
+    Fm = rbind(c(1, 1/(1 + par["phi"]^2)), c(0, 1))
     colnames(Fm) = c("Tt1", "Mt1")
     rownames(Fm) = c("Tt0", "Mt0")
     #Observation matrix
@@ -101,6 +101,7 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
   
   #Transition equation intercept matrix
   Dm = matrix(0, nrow = nrow(Fm))
+  Dm[rownames(Fm) == "Mt0", ] = (1 - 1/(1 + par["phi"]^2))*par["m_bar"]
   
   #Observaton equation intercept matrix
   Am = matrix(0, nrow = 1, ncol = 1)
@@ -126,10 +127,11 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
   if(is.null(init)) {
     P0 = diag(100, nrow = nrow(Fm), ncol = nrow(Fm))
     rownames(P0) = colnames(P0) = rownames(Fm)
-    P0["Tt0", "Tt0"] = var(c(yt[1:ifelse(freq == 1, round(length(y)/4), freq)]), na.rm = T)
+    P0["Tt0", "Tt0"] = ((max(yt[1:ifelse(freq == 1, round(length(y)/4), freq)], na.rm = T) - B0["Tt0"])/qnorm(0.9999))^2
     if(trend_spec == "2rw") {
       P0["Tt1", "Tt1"] = P0["Tt0", "Tt0"]
     }
+    diag(P0)[!grepl("Tt", names(diag(P0)))] = (max(scale(yt[1:ifelse(freq == 1, round(length(y)/4), freq)] - B0["Tt0"], scale = F), na.rm = T)/qnorm(0.9999))^2
   }else{
     P0 = init[["P0"]]
   }
@@ -157,12 +159,14 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
 #' @param decomp Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")
 #' @param trend_spec Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
 #' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
+#' @param multiplicative If data should be logged to create a multiplicative model
 #' @param optim_methods Vector of 1 to 3 optimization methods in order of preference ("NR", "BFGS", "CG", "BHHH", or "SANN")
 #' @param det_obs Set the observation equation error variance to 0 (deterministic observation equation)
 #' @param det_trend Set the trend error variance to 0 (deterministic trend)
 #' @param det_seasonality Set the seasonality error variances to 0 (deterministic seasonality)
 #' @param det_cycle Set thecycle error variance to 0 (deterministic cycle)
 #' @param det_drift Set the drift error variance to 0 (deterministic drift)
+#' @param damped_trend "rwd" trend_spec only, allow drift equation to be autoregressive 
 #' @param maxit Maximum number of iterations for the optimization
 #' @param maxtrials Maximum number of optimization trials to get convergence
 #' @return List of estimation values including coefficients, convergence code, datea frequency, decomposition used, and trend specification selected.
@@ -170,8 +174,8 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
 #' tcs_decomp_estim(y = DT[, c("date", "y")])
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, det_obs = F, 
-                             det_trend = F, det_seasonality = F, det_cycle = F, det_drift = F, 
+tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, multiplicative = NULL, det_obs = F, 
+                             det_trend = F, det_seasonality = F, det_cycle = F, det_drift = F, damped_trend = F,
                              level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
   dates = NULL
   if(is.null(freq)){
@@ -222,6 +226,24 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
     stop("maxtrials must be numeric and greater than 0.")
   }else if(maxtrials <= 0){
     stop("maxtrials must be numeric and greater than 0.")
+  }
+  #Remove leading and trailing NAs
+  range = which(!is.na(y))
+  y = unname(y[range[1]:range[length(range)]])
+  dates = dates[range[1]:range[length(range)]]
+  
+  if(is.null(multiplicative)){
+    if(all(y > 0)){
+      test = lmtest::gqtest(y ~ t,  data = data.frame(y = y, t = 1:length(y)))
+    }
+    if(test$p.value <= level){
+      multiplicative = T
+    }else{
+      multiplicative = F
+    }
+  }
+  if(multiplicative == T){
+    y = log(y)
   }
   
   #Set the decomposition
@@ -289,6 +311,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
         par = c(par, sig_m = unname(par["sig_t"]))
       }
     }
+    par = c(par, phi = 0, m_bar = 0)
     if(grepl("seasonal", decomp)){
       if(freq %in% c(1, 4, 12)){
         seas_freqs = 1:(floor(freq)/2)
@@ -326,8 +349,11 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
       fixed = c(fixed, "sig_c")
     }
     if(det_drift == T){
-      par["sig_m"] = T
+      par["sig_m"] = 0
       fixed = c(fixed, "sig_m")
+    }
+    if(damped_trend == T){
+      fixed = c(fixed, "phi", "m_bar")
     }
 
     #Define the objective function
@@ -407,7 +433,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
   
     if(!is.null(out)){
       # Retreive the model output
-      return(data.table::data.table(model = i, freq = freq, decomp = decomp, convergence = out$code, loglik = out$maximum,
+      return(data.table::data.table(model = i, freq = freq, decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
                                     matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out)))))))
     }else{
       return(NULL)
@@ -436,7 +462,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, d
 #' tcs_decomp_filter(y = DT[, c("date", "y")], model = model)
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-tcs_decomp_filter = function(y, model, plot = F, select = NULL){
+tcs_decomp_filter = function(y, model, plot = F){
   y = data.table::as.data.table(y)
   .SD = data.table::.SD
   datecol = unlist(lapply(colnames(y), function(x){
@@ -446,6 +472,7 @@ tcs_decomp_filter = function(y, model, plot = F, select = NULL){
       return(NULL)
     }
   }))
+  dates = NULL
   if(length(datecol) == 1){
     #Detect the frequency
     dates = y[, datecol, with = F][[1]]
@@ -453,13 +480,20 @@ tcs_decomp_filter = function(y, model, plot = F, select = NULL){
     rm(datecol)
   }else if(length(datecol) > 1){
       stop("Too many date columns detected.")
-  }else {
-    stop("No date column detected. Include a date column or set the frequency.")
   }
   
   #Set the dates if it hasn't been given
   if(is.null(dates)){
     dates = 1:length(y)
+  }
+  
+  #Remove leading and trailing NAs
+  range = which(!is.na(y))
+  y = unname(y[range[1]:range[length(range)]])
+  dates = dates[range[1]:range[length(range)]]
+  
+  if(mod$table$multiplicative == T){
+    y = log(y)
   }
   
   #Find any missing values
@@ -582,7 +616,7 @@ tcs_decomp_filter = function(y, model, plot = F, select = NULL){
         ggplot2::theme_minimal() + ggplot2::guides(color = ggplot2::guide_legend(title = NULL)) + 
         ggplot2::theme(legend.position = "bottom")
       if(!all(is.na(model[["periodogram"]]))){
-        g3 = ggplot2::ggplot(model[["periodogram"]][, .(`Significant Frequencies` = significant, spec = mean(spec)), by = round(period)]) + 
+        g3 = ggplot2::ggplot(model[["periodogram"]][, .(`Significant Frequencies` = significant, spec = mean(spec, na.rm = T)), by = round(period)]) + 
           ggplot2::ggtitle("Periodogram") + ggplot2::scale_x_continuous(name = "Period") + 
           ggplot2::scale_y_continuous(name = "Spec") + 
           ggplot2::geom_col(ggplot2::aes(x = round, y = spec, fill = `Significant Frequencies`, color = `Significant Frequencies`), 
