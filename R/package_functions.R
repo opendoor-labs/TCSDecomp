@@ -476,9 +476,6 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     }
     rm(init)
     gc()
-    if(verbose == T){
-      cat("Done.\n")
-    }
   
     if(!is.null(out)){
       # Retreive the model output
@@ -489,6 +486,9 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     }
   }
   snow::stopCluster(cl)
+  if(verbose == T){
+    cat("Done.\n")
+  }
   
   #Select the best model based on the maximum likelihood
   fit = fit[loglik == max(loglik, na.rm = T), ]
