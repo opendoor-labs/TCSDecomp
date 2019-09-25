@@ -345,11 +345,6 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, decomp = NULL, trend_sp
   }else if(maxit <= 0){
     stop("maxit must be numeric and greater than 0.")
   }
-  if(!is.numeric(maxtrials)){
-    stop("maxtrials must be numeric and greater than 0.")
-  }else if(maxtrials <= 0){
-    stop("maxtrials must be numeric and greater than 0.")
-  }
   
   #Get the frequency of the data
   y = tcs_detect_freq(y, freq)
@@ -361,6 +356,9 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, decomp = NULL, trend_sp
   range = which(!is.na(y))
   y = unname(y[range[1]:range[length(range)]])
   dates = dates[range[1]:range[length(range)]]
+  if(!is.null(exo)){
+    exo = exo[range[1]:range[length(range)], ]
+  }
   
   #Check for a multiplicative model
   if(is.null(multiplicative)){
@@ -566,8 +564,8 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     dates = model$dates
     freq = model$table$freq
     y = model$data
-    exo = model$exo
-    if(is.na(exo)){
+    X = t(as.matrix(model$exo))
+    if(all(is.na(X))){
       X = t(matrix(0, nrow = length(y), ncol = 1))
       rownames(X) = "X"
     }
