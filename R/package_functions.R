@@ -17,7 +17,15 @@
 #' SSmodel(par, y, freq, decomp, trend_spec, init)
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
+SSmodel = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec = NULL, init = NULL, model = NULL){
+  if(!is.null(model)){
+    par = unlist(model$table[, grepl("coef_", colnames(mod$table)), with = F])
+    names(par) = gsub("coef_", "", names(par))
+    yt = model$data
+    freq = model$table$freq
+    trend_spec = model$table$model
+    decomp = model$table$decomp
+  }
   yt = matrix(yt, nrow = 1)
   
   #Define the standard deviation of the observation equation
@@ -44,7 +52,7 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
     #T_t = M_{t-1} + T_{t-1} + e_t, e_t ~ N(0, sig_t^2)
     #M_t = (1 - phi)*M_bar + phi*M_{t-1} + n_t, n_t ~ N(0, sig_m^2)
     #Transition matrix
-    Fm = rbind(c(1, 1/(1 + par["phi"]^2)), c(0, 1)) #Constraint the trend dampening paramter phi to be between 0 and 1 (including 1)
+    Fm = rbind(c(1, 1), c(0, 1/(1 + par["phi"]^2))) #Constraint the trend dampening paramter phi to be between 0 and 1 (including 1)
     colnames(Fm) = c("Tt1", "Mt1")
     rownames(Fm) = c("Tt0", "Mt0")
     #Observation matrix
