@@ -2,59 +2,87 @@
 % Please edit documentation in R/package_functions.R
 \name{tcs_decomp_estim}
 \alias{tcs_decomp_estim}
-\title{Trend cycle seasonal decomposition using the Kalman filter
-Estimates a structural time series model using the Kalman filter and maximum likelihood
-The seasonal and cycle components are assumed to be of a trigonometric form.
-The function checks 4 trend specifications to decompose a univariate time series
-into trend, cycle, and/or seasonal components plus noise. The function automatically
-detects the frequency and checks for a seasonal and cycle component if the user does not specify
-the frequency or decomposition model. This can be turned off by setting freq or specifying decomp.}
+\title{Trend cycle seasonal decomposition using the Kalman filter.}
 \usage{
-tcs_decomp_estim(y, freq = NULL, decomp = NULL, trend_spec = NULL,
-  det_obs = F, det_trend = F, det_seasonality = F, det_cycle = F,
-  det_drift = F, level = 0.01, optim_methods = c("BFGS", "CG", "NM"),
-  maxit = 1000, maxtrials = 10)
+tcs_decomp_estim(y, exo = NULL, freq = NULL, decomp = NULL,
+  trend_spec = NULL, multiplicative = NULL, det_obs = F,
+  det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
+  full_seas_freq = F, wavelet.method = "ARIMA", wavelet.sim = 100,
+  level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 10000)
 }
 \arguments{
 \item{y}{Univariate time series of data values. May also be a 2 column data frame containing a date column.}
 
-\item{freq}{Seasonality of the data (1, 4, 12, 53, 365)}
+\item{exo}{Matrix of exogenous variables. Can be used to specify regression effects or other seasonal effects like holidays, etc.}
+
+\item{freq}{Seasonality of the data (1, 4, 12, 52, 365)}
 
 \item{decomp}{Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")}
 
-\item{trend_spec}{Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
+\item{trend_spec}{Trend specification ("rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
 "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.}
+
+\item{multiplicative}{If data should be logged to create a multiplicative model}
 
 \item{det_obs}{Set the observation equation error variance to 0 (deterministic observation equation)}
 
 \item{det_trend}{Set the trend error variance to 0 (deterministic trend)}
 
-\item{det_seasonality}{Set the seasonality error variances to 0 (deterministic seasonality)}
+\item{det_seas}{Set the seasonality error variances to 0 (deterministic seasonality)}
 
 \item{det_cycle}{Set thecycle error variance to 0 (deterministic cycle)}
 
 \item{det_drift}{Set the drift error variance to 0 (deterministic drift)}
 
+\item{full_seas_freq}{Use the full seasonality pattern instead of the truncated pattern for higher frequency data. 
+It is set to F by default for better speed with the expense of minimal accuracy loss of seasonal patters. 
+The use of Fourier series for seasonality only requires seasonal frequencies up to floor(frequency/2). 
+Yearly frequency uses no seasonality.
+Quarterly frequency uses 1:2 regardless of the state of full_seas_freq.
+Monthly frequency uses 1:6 regardless of the state of full_seas_freq.
+Weekly frequency uses c(1, 2, 3, 4, 8, 12, 16, 21, 26) seasonaly frequencies by default. When full_freq = T, it will use 1:26.
+Daily frequency uses c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182) seasonal frequencies by default. When full_freq == T, it will use 1:182.}
+
+\item{wavelet.method}{Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".}
+
+\item{wavelet.sim}{Number of simulations for wavelet analysis. Default is 100}
+
 \item{optim_methods}{Vector of 1 to 3 optimization methods in order of preference ("NR", "BFGS", "CG", "BHHH", or "SANN")}
 
 \item{maxit}{Maximum number of iterations for the optimization}
-
-\item{maxtrials}{Maximum number of optimization trials to get convergence}
 }
 \value{
 List of estimation values including coefficients, convergence code, datea frequency, decomposition used, and trend specification selected.
 }
 \description{
-State space model for decomposition
-Yt = T_t + C_t + S_t + e_t, e_t ~ N(0, sig_e^2)
+Estimates a structural time series model using the Kalman filter and maximum likelihood.
+The seasonal and cycle components are assumed to be of a trigonometric form.
+The function checks three trend specifications to decompose a univariate time series
+into trend, cycle, and/or seasonal components plus noise. The function automatically
+detects the frequency and checks for a seasonal and cycle component if the user does not specify
+the frequency or decomposition model. This can be turned off by setting freq or specifying decomp.
+State space model for decomposition follows
+Yt = T_t + C_t + S_t + BX_t + e_t, e_t ~ N(0, sig_e^2)
 Y is the data
 T is the trend component
 C is the cycle component
 S is the seasonal component
+X is the exogenous data with parameter vector B
 e is the observation error
 }
 \examples{
 tcs_decomp_estim(y = DT[, c("date", "y")])
+If multiplicative = T, then the data is logged and the original model becomes multiplicative (Y_t = T_t * C_t * S_t * BX_t * e_t)
+If trend is "rw", the trend model is T_t = T_{t-1} + e_t, e_t ~ N(0, sig_t^2)
+If trend is "rwd", the trend model is T_t = M_{t-1} + T_{t-1} + e_t, e_t ~ N(0, sig_t^2) with 
+     M_t = (1 - phi)*M_bar + phi*M_{t-1} + n_t, n_t ~ N(0, sig_m^2) where
+     phi is the dampening parameter and M_bar the mean of the drift. 
+If trend is "2rw", the trend model is T_t = 2T_{t-1} - T_{t-2} + e_t, e_t ~ N(0, sig_t^2)
+If det_obs = T then sig_e is set to 0 
+If det_trend = T then the variacne of the trend (sig_t) is set to 0 and is referred to as a smooth trend
+If det_drift = T then the variance of the drift (sig_m) is set to 0 and is refereed to as a deterministic drift
+If det_seas = T then the variance all seasonality frequencies j (sig_j) are set to 0 and is referred to as deterministic seasonality
+If det_cycle = T then the variance of the cyclce (sig_c) is set to 0 and is refreed to as a deterministic cycle
 }
 \author{
 Alex Hubbard (hubbard.alex@gmail.com)

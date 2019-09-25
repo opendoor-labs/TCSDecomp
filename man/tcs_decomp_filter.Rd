@@ -2,14 +2,14 @@
 % Please edit documentation in R/package_functions.R
 \name{tcs_decomp_filter}
 \alias{tcs_decomp_filter}
-\title{Kalman filter an estimated model from tcs_decomp_estim}
+\title{Kalman Filter.}
 \usage{
-tcs_decomp_filter(y, model, plot = F, select = NULL)
+tcs_decomp_filter(model, y = NULL, exo = NULL, plot = F)
 }
 \arguments{
-\item{y}{Univariate time series of data values. May also be a 2 column data frame containing a date column.}
-
 \item{model}{Structural time series model estimated using tcs_decomp_estim.}
+
+\item{y}{Univariate time series of data values. May also be a 2 column data frame containing a date column.}
 
 \item{plot}{Logial, whether to plot the output or not.}
 }
@@ -17,7 +17,7 @@ tcs_decomp_filter(y, model, plot = F, select = NULL)
 List of data tables containing the filtered and smoothed series.
 }
 \description{
-Kalman filter an estimated model from tcs_decomp_estim
+Kalman filter an estimated model from tcs_decomp_estim object
 }
 \examples{
 tcs_decomp_filter(y = DT[, c("date", "y")], model = model)
