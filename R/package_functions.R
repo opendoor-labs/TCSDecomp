@@ -140,6 +140,8 @@ SSmodel = function(par, yt, freq, decomp, trend_spec, init = NULL){
   return(list(B0 = B0, P0 = P0, At = Am, Dt = Dm, Ht = Hm, Ft = Fm, Rt = Rm, Qt = Qm))
 }
 
+#' Detect cycle and seasonality from the data
+#'
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
 #' @param freq Seasonality of the data (1, 4, 12, 52, 365)
 #' @return List giving the decomposition and wavelet
@@ -182,6 +184,8 @@ tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 10
   return(list(wave = wave, decomp = decomp))
 }
 
+#' Detect frequency and dates from the data
+#'
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
 #' @param freq Initial setting for the frequency detection
 #' @return List giving the dates and frequency of the data
@@ -196,12 +200,21 @@ tcs_detect_freq = function(y, freq = NULL){
   }else{
     y = data.table::as.data.table(y)
     datecol = unlist(y[, lapply(.SD, class), .SDcols = colnames(y)])
-    datecol = names(datecol[datecol == "Date"])
+    datecol = names(datecol[datecol %in% c("Date", "yearmon")])
+    if(class(y[, c(datecol), with = F][[1]]) == "yearmon"){
+      y[, c(datecol) := as.Date(eval(parse(text = datecol)))]
+      is.yearmon = T
+    }else{
+      is.yearmon = F
+    }
     if(length(datecol) == 1) {
       datediffs = unique(diff(unlist(y[, c(datecol), with = F])))
       freq = datediffs[which.max(tabulate(match(diff(y[, c(datecol), with = F][[1]]), datediffs)))]
       freq = c(365, 52, 12, 4, 1)[which.min(abs(freq -  c(1, 7, 30, 90, 365)))]
       dates = y[, c(datecol), with = F][[1]]
+      if(is.yearmon == T){
+        dates = as.yearmon(dates)
+      }
       y = unlist(y[, colnames(y)[colnames(y) != datecol], with = F])
       rm(datediffs, datecol)
     }else if(length(datecol) > 1){
@@ -213,6 +226,33 @@ tcs_detect_freq = function(y, freq = NULL){
     }
   }
   return(list(data = y, dates = dates, freq = freq))
+}
+
+#' Build the date sequence as a Date type
+#' 
+#' @param y an object created from tcs_detect_freq
+#' @author Alex Hubbard (hubbard.alex@gmail.com)
+#' @export
+tcs_build_dates = function(y){
+  dates = tryCatch(as.Date(y$dates), 
+                   error = function(err){
+                     `%fun%` = lubridate::`%m+%`
+                     diff = mean(unique(diff(y$dates)))
+                     years = as.numeric(floor(y$dates))
+                     parts = as.numeric(y$dates - years)
+                     if(y$freq == 1){
+                       as.Date(paste0(years, "-01-01")) %fun% years(ceiling((parts/diff)))
+                     }else if(y$freq == 4){
+                       as.Date(paste0(years, "-01-01")) %fun% months(ceiling((parts/diff))*3)
+                     }else if(y$freq == 12){
+                       as.Date(paste0(years, "-01-01")) %fun% months(ceiling((parts/diff)))
+                     }else if(y$freq == 52){
+                       as.Date(paste0(years, "-01-01")) %fun% weeks(ceiling((parts/diff)))
+                     }else if(y$freq == 365){
+                       as.Date(paste0(years, "-01-01")) %fun% dates(ceiling((parts/diff)))
+                     }
+                   })
+  return(dates)
 }
 
 #' Trend cycle seasonal decomposition using the Kalman filter
@@ -286,6 +326,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   
   #Get the frequency of the data
   y = tcs_detect_freq(y, freq)
+  dates = tcs_build_dates(y)
   freq = y$freq
   y = y$data
   
@@ -476,7 +517,10 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 
   #Select the best model based on the maximum likelihood
   fit = fit[loglik == max(loglik, na.rm = T), ]
-  fit = list(table = fit)
+  fit = list(table = fit, data = y, dates = dates)
+  if(multiplicative == T){
+    fit$data = exp(fit$data)
+  }
   if(exists("wave")){
     fit[["wavelet"]] = wave
   }else{
@@ -495,13 +539,19 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 #' tcs_decomp_filter(y = DT[, c("date", "y")], model = model)
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-tcs_decomp_filter = function(y, model, plot = F, verbose = F){
+tcs_decomp_filter = function(model, y = NULL, plot = F){
   
   #Get the dates and frequency of the data
-  y = tcs_detect_freq(y, model$freq)
-  dates = as.Date(y$dates)
-  freq = y$freq
-  y = y$data
+  if(is.null(y)){
+    dates = model$dates
+    freq = model$table$freq
+    y = model$data
+  }else{
+    y = tcs_detect_freq(y, model$freq)
+    dates = tcs_build_dates(y)
+    freq = y$freq
+    y = y$data
+  }
   
   #Remove leading and trailing NAs
   range = which(!is.na(y))
