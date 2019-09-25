@@ -111,7 +111,9 @@ SSmodel = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
   
   #Transition equation intercept matrix
   Dm = matrix(0, nrow = nrow(Fm))
-  Dm[rownames(Fm) == "Mt0", ] = (1 - 1/(1 + par["phi"]^2))*par["m_bar"]
+  if(trend_spec == "rwd"){
+    Dm[rownames(Fm) == "Mt0", ] = (1 - 1/(1 + par["phi"]^2))*par["m_bar"]
+  }
   
   #Observaton equation intercept matrix
   Am = matrix(0, nrow = 1, ncol = 1)
@@ -388,10 +390,9 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     }else if(i %in% c("rwd", "2rw")){
       par = c(sig_t = sqrt(1/7 * var(diff(diff(y)), na.rm = T)))
       if(i == "rwd"){
-        par = c(par, sig_m = unname(par["sig_t"]))
+        par = c(par, sig_m = unname(par["sig_t"]), phi = 0, m_bar = 0)
       }
     }
-    par = c(par, phi = 0, m_bar = 0)
     if(grepl("seasonal", decomp)){
       if(freq %in% c(1, 4, 12)){
         seas_freqs = 1:(floor(freq)/2)
