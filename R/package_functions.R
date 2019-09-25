@@ -69,6 +69,14 @@ SSmodel = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     colnames(Hm) = rownames(Fm)
   }
   
+  #Get the parameters on exogenous data
+  if(any(grepl("beta_", names(par)))){
+    beta = matrix(par[grepl("beta_", names(par))], nrow = 1, ncol = length(par[grepl("beta_", names(par))]))
+    colnames(beta) = gsub("beta_\\.", "", names(par[grepl("beta_", names(par))]))
+  }else{
+    beta = matrix(0, nrow = 1, ncol = 1)
+  }
+  
   #Define the transition error covariance matrix
   Qm = matrix(0, nrow = nrow(Fm), ncol = ncol(Fm))
   colnames(Qm) = rownames(Qm) = rownames(Fm)
@@ -147,7 +155,7 @@ SSmodel = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
   }else{
     P0 = init[["P0"]]
   }
-  return(list(B0 = B0, P0 = P0, At = Am, Dt = Dm, Ht = Hm, Ft = Fm, Rt = Rm, Qt = Qm))
+  return(list(B0 = B0, P0 = P0, At = Am, Dt = Dm, Ht = Hm, Ft = Fm, Rt = Rm, Qt = Qm, beta = beta))
 }
 
 #' Detect cycle and seasonality from the data
@@ -281,6 +289,7 @@ tcs_build_dates = function(y){
 #' S is the seasonal component
 #' e is the observation error
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
+#' @param exo Matrix of exogenous variables. Can be used to specify regression effects or other seasonal effects like holidays, etc.
 #' @param freq Seasonality of the data (1, 4, 12, 52, 365)
 #' @param decomp Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")
 #' @param trend_spec Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
@@ -292,6 +301,14 @@ tcs_build_dates = function(y){
 #' @param det_seas Set the seasonality error variances to 0 (deterministic seasonality)
 #' @param det_cycle Set thecycle error variance to 0 (deterministic cycle)
 #' @param det_drift Set the drift error variance to 0 (deterministic drift)
+#' @param full_seas_freq Use the full seasonality pattern instead of the truncated pattern for higher frequency data. 
+#' It is set to F by default for better speed with the expense of minimal accuracy loss of seasonal patters. 
+#' The use of Fourier series for seasonality only requires seasonal frequencies up to floor(frequency/2). 
+#' Yearly frequency uses no seasonality.
+#' Quarterly frequency uses 1:2 regardless of the state of full_seas_freq.
+#' Monthly frequency uses 1:6 regardless of the state of full_seas_freq.
+#' Weekly frequency uses c(1, 2, 3, 4, 8, 12, 16, 21, 26) seasonaly frequencies by default. When full_freq = T, it will use 1:26.
+#' Daily frequency uses c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182) seasonal frequencies by default. When full_freq == T, it will use 1:182.
 #' @param maxit Maximum number of iterations for the optimization
 #' @param maxtrials Maximum number of optimization trials to get convergence
 #' @param wavelet.method Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".
@@ -312,9 +329,9 @@ tcs_build_dates = function(y){
 #' If det_cycle = T then the variance of the cyclce (sig_c) is set to 0 and is refreed to as a deterministic cycle
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, multiplicative = NULL, det_obs = F, 
-                             det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
-                             wavelet.method = "ARIMA", wavelet.sim = 100, 
+tcs_decomp_estim = function (y, exo = NULL, freq = NULL, decomp = NULL, trend_spec = NULL, multiplicative = NULL, 
+                             det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
+                             full_seas_freq = F, wavelet.method = "ARIMA", wavelet.sim = 100, 
                              level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 1000, maxtrials = 10){
   
   if(level < 0.01 | level > 0.1){
@@ -343,6 +360,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   #Remove leading and trailing NAs
   range = which(!is.na(y))
   y = unname(y[range[1]:range[length(range)]])
+  dates = dates[range[1]:range[length(range)]]
   
   #Check for a multiplicative model
   if(is.null(multiplicative)){
@@ -376,6 +394,28 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     }
     iter = trend_spec
   }
+  
+  # #Create time dummies
+  # if(grepl("seasonal", decomp) & freq != 1){  
+  #   if(freq == 4){
+  #     dum = data.table::data.table(date = dates, qtr = lubridate::quarter(dates), y = y)
+  #     dum = data.table::dcast(dum, date ~ qtr, value.var = "y")
+  #     colnames(dum)[2:ncol(dum)] = paste("Qtr", colnames(dum)[2:ncol(dum)]) 
+  #   }else if(freq == 12){
+  #     dum = data.table::data.table(date = dates, month = lubridate::month(dates), y = y)
+  #     dum = data.table::dcast(dum, date ~ month, value.var = "y")
+  #     colnames(dum)[2:ncol(dum)] = as.character(lubridate::month(as.numeric(colnames(dum)[2:ncol(dum)]), label = T))
+  #   }else if(freq == 52){
+  #     dum = data.table::data.table(date = dates, week = lubridate::week(dates), y = y)
+  #     dum = data.table::dcast(dum, date ~ week, value.var = "y")
+  #     colnames(dum)[2:ncol(dum)] = paste("Week", colnames(dum)[2:ncol(dum)]) 
+  #   }
+  #   dum[, colnames(dum)[2:ncol(dum)] := lapply(.SD, function(x){
+  #     x[!is.na(x)] = 1
+  #     x[is.na(x)] = 0
+  #     return(x)
+  #   }), .SDcols = colnames(dum)[2:ncol(dum)]]
+  # }
 
   #Set parallel options
   cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
@@ -394,10 +434,10 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
       }
     }
     if(grepl("seasonal", decomp)){
-      if(freq %in% c(1, 4, 12)){
-        seas_freqs = 1:(floor(freq)/2)
+      if(full_seas_freq == T | freq %in% c(1, 4, 12)){
+        seas_freqs = 1:(floor(freq/2))
       }else if(freq == 52){
-        seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 20, 24)
+        seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 21, 26)
       }else if(freq == 365){
         seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
       }
@@ -410,7 +450,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     if(grepl("seasonal|cycle", decomp)){
       par = c(par, sig_e = unname(par["sig_t"]))
     }
-
+                           
     #Set any fixed parameters
     fixed = NULL
     if(det_obs == T){
@@ -433,16 +473,27 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
       par["sig_m"] = 0
       fixed = c(fixed, "sig_m")
     }
-
+    if(is.null(exo)){
+      X = t(matrix(0, nrow = length(y), ncol = 1))
+      rownames(X) = "X"
+      par = c(par, beta_X = 0)
+      fixed = c(fixed, "beta_X")
+    }else{
+      X = t(exo)
+      par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
+    }
+    
     #Define the objective function
     objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
       yt = matrix(get("y"), nrow = 1)
       sp = SSmodel(par, yt, freq, decomp, trend_spec, init)
-      ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
+      ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
+                          yt = yt, X = X, beta = sp$beta)
       if (!is.null(na_locs)) {
         fc = sp$Ht %*% ans$B_tt
         yt[, na_locs] = fc[, na_locs]
-        ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = yt)
+        ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
+                            yt = yt, X = X, beta = sp$beta)
         assign("y", c(yt), .GlobalEnv)
       }
       return(ans$loglik)
@@ -450,7 +501,8 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   
     #Get initial values for Kalman Filter
     sp = SSmodel(par, y, freq, decomp, trend_spec = i)
-    init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
+                         yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
     init2 = tryCatch(kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft), 
                     error = function(err){NULL})
     if(is.null(init)){
@@ -516,8 +568,12 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   
     if(!is.null(out)){
       # Retreive the model output
-      return(data.table::data.table(model = i, freq = freq, decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
-                                    matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out)))))))
+      ret = data.table::data.table(model = i, freq = freq, decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
+                                   matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
+      if(is.null(exo)){
+        ret[, colnames(ret)[grepl("beta_", colnames(ret))] := NULL]
+      }
+      return(ret)
     }else{
       return(NULL)
     }
@@ -525,8 +581,7 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
   snow::stopCluster(cl)
 
   #Select the best model based on the maximum likelihood
-  fit = fit[loglik == max(loglik, na.rm = T), ]
-  fit = list(table = fit, data = y, dates = dates)
+  fit = list(table = fit[loglik == max(loglik, na.rm = T), ], data = y, dates = dates)
   if(multiplicative == T){
     fit$data = exp(fit$data)
   }
@@ -534,6 +589,11 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
     fit[["wavelet"]] = wave
   }else{
     fit[["wavelet"]] = NA
+  }
+  if(is.null(exo)){
+    fit[["exo"]] = NA
+  }else{
+    fit[["exo"]] = exo
   }
   return(fit)
 }
@@ -548,18 +608,27 @@ tcs_decomp_estim = function (y, freq = NULL, decomp = NULL, trend_spec = NULL, m
 #' tcs_decomp_filter(y = DT[, c("date", "y")], model = model)
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-tcs_decomp_filter = function(model, y = NULL, plot = F){
+tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   
   #Get the dates and frequency of the data
   if(is.null(y)){
     dates = model$dates
     freq = model$table$freq
     y = model$data
+    exo = model$exo
+    if(is.na(exo)){
+      X = t(matrix(0, nrow = length(y), ncol = 1))
+      rownames(X) = "X"
+    }
   }else{
     y = tcs_detect_freq(y, model$freq)
     dates = tcs_build_dates(y)
     freq = y$freq
     y = y$data
+    if(is.null(exo)){
+      X = t(matrix(0, nrow = length(y), ncol = 1))
+      rownames(X) = "X"
+    }
   }
   
   #Remove leading and trailing NAs
@@ -594,15 +663,18 @@ tcs_decomp_filter = function(model, y = NULL, plot = F){
   
   #Filter the data
   sp = SSmodel(cs, y, freq, decomp, trend_spec)
-  init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+  init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
+                       yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
   init = kalman_smoother(B_tl = init$B_tl, B_tt = init$B_tt, P_tl = init$P_tl, P_tt = init$P_tt, Ft = sp$Ft)
   init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
   sp = SSmodel(cs, y, freq, decomp, trend_spec, init)
-  ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+  ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
+                      yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
   if(!is.null(na_locs)){
     fc = sp$Ht %*% ans$B_tt
     y[na_locs] = fc[, na_locs]
-    ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
+    ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
+                        yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
   }
   rownames(ans$B_tt) = rownames(sp$Ft)
   smooth = kalman_smoother(B_tl = ans$B_tl, B_tt = ans$B_tt, P_tl = ans$P_tl, P_tt = ans$P_tt, Ft = sp$Ft)[["B_tt"]]

@@ -5,8 +5,8 @@ Rginv <- function(m) {
     .Call('_TCSDecomp_Rginv', PACKAGE = 'TCSDecomp', m)
 }
 
-kalman_filter <- function(B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt) {
-    .Call('_TCSDecomp_kalman_filter', PACKAGE = 'TCSDecomp', B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt)
+kalman_filter <- function(B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt, X, beta) {
+    .Call('_TCSDecomp_kalman_filter', PACKAGE = 'TCSDecomp', B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt, X, beta)
 }
 
 kalman_smoother <- function(B_tl, B_tt, P_tl, P_tt, Ft) {

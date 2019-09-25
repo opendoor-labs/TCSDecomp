@@ -59,7 +59,7 @@ arma::mat Rginv(arma::mat m){
 // [[Rcpp::export]]
 Rcpp::List kalman_filter(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At,
               arma::mat Ft, arma::mat Ht, arma::mat Qt, arma::mat Rt,
-              arma::mat yt){
+              arma::mat yt, arma::mat X, arma::mat beta){
 
   //Define the storage matrices
   arma::mat B_tt(Ft.n_rows, yt.n_cols);
@@ -81,7 +81,7 @@ Rcpp::List kalman_filter(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At,
   for(int i = 0; i < yt.n_cols; i++){
     B_tl.col(i) = Dt + Ft * B_LL; //Initial estimate of unobserved values conditional on t-1
     P_tl.slice(i) = Ft * P_LL * Ft.t() + Qt; //Initial estimate of the covariance matrix conditional on t-1
-    N_t.col(i) = yt.col(i) - At - Ht * B_tl.col(i); //Prediction error conditoinal on t-1
+    N_t.col(i) = yt.col(i) - At - Ht * B_tl.col(i) - beta * X.col(i); //Prediction error conditoinal on t-1
     nonna_idx = arma::find_finite(N_t.col(i));
     na_idx = arma::find_nonfinite(N_t.col(i));
     if(!na_idx.is_empty()){
