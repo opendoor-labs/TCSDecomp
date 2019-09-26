@@ -7,48 +7,48 @@
 using namespace Rcpp;
 
 // Rginv
-arma::mat Rginv(arma::mat m);
+arma::mat Rginv(const arma::mat& m);
 RcppExport SEXP _TCSDecomp_Rginv(SEXP mSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat >::type m(mSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type m(mSEXP);
     rcpp_result_gen = Rcpp::wrap(Rginv(m));
     return rcpp_result_gen;
 END_RCPP
 }
 // kalman_filter
-Rcpp::List kalman_filter(arma::mat B0, arma::mat P0, arma::mat Dt, arma::mat At, arma::mat Ft, arma::mat Ht, arma::mat Qt, arma::mat Rt, arma::mat yt, arma::mat X, arma::mat beta);
+Rcpp::List kalman_filter(const arma::mat B0, const arma::mat P0, const arma::mat Dt, const arma::mat At, const arma::mat Ft, const arma::mat Ht, const arma::mat Qt, const arma::mat Rt, const arma::mat yt, const arma::mat X, const arma::mat beta);
 RcppExport SEXP _TCSDecomp_kalman_filter(SEXP B0SEXP, SEXP P0SEXP, SEXP DtSEXP, SEXP AtSEXP, SEXP FtSEXP, SEXP HtSEXP, SEXP QtSEXP, SEXP RtSEXP, SEXP ytSEXP, SEXP XSEXP, SEXP betaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat >::type B0(B0SEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type P0(P0SEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Dt(DtSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type At(AtSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Ft(FtSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Ht(HtSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Qt(QtSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Rt(RtSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type yt(ytSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type X(XSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type beta(betaSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type B0(B0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type P0(P0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type Dt(DtSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type At(AtSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type Ft(FtSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type Ht(HtSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type Qt(QtSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type Rt(RtSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type yt(ytSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type beta(betaSEXP);
     rcpp_result_gen = Rcpp::wrap(kalman_filter(B0, P0, Dt, At, Ft, Ht, Qt, Rt, yt, X, beta));
     return rcpp_result_gen;
 END_RCPP
 }
 // kalman_smoother
-Rcpp::List kalman_smoother(arma::mat B_tl, arma::mat B_tt, arma::cube P_tl, arma::cube P_tt, arma::mat Ft);
+Rcpp::List kalman_smoother(const arma::mat B_tl, arma::mat B_tt, const arma::cube P_tl, arma::cube P_tt, const arma::mat Ft);
 RcppExport SEXP _TCSDecomp_kalman_smoother(SEXP B_tlSEXP, SEXP B_ttSEXP, SEXP P_tlSEXP, SEXP P_ttSEXP, SEXP FtSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat >::type B_tl(B_tlSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type B_tl(B_tlSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type B_tt(B_ttSEXP);
-    Rcpp::traits::input_parameter< arma::cube >::type P_tl(P_tlSEXP);
+    Rcpp::traits::input_parameter< const arma::cube >::type P_tl(P_tlSEXP);
     Rcpp::traits::input_parameter< arma::cube >::type P_tt(P_ttSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Ft(FtSEXP);
+    Rcpp::traits::input_parameter< const arma::mat >::type Ft(FtSEXP);
     rcpp_result_gen = Rcpp::wrap(kalman_smoother(B_tl, B_tt, P_tl, P_tt, Ft));
     return rcpp_result_gen;
 END_RCPP
