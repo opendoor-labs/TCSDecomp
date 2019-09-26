@@ -4,10 +4,10 @@
 \alias{tcs_decomp_estim}
 \title{Trend cycle seasonal decomposition using the Kalman filter.}
 \usage{
-tcs_decomp_estim(y, exo = NULL, freq = NULL, decomp = NULL,
-  trend_spec = NULL, multiplicative = NULL, det_obs = F,
-  det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
-  full_seas_freq = F, wavelet.method = "ARIMA", wavelet.sim = 100,
+tcs_decomp_estim(y, exo = NULL, freq = NULL, full_seas_freq = F,
+  decomp = NULL, trend_spec = NULL, multiplicative = F, boxcox = F,
+  det_obs = F, det_trend = F, det_seas = F, det_cycle = F,
+  det_drift = F, wavelet.method = "ARIMA", wavelet.sim = 100,
   level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 10000)
 }
 \arguments{
@@ -15,7 +15,8 @@ tcs_decomp_estim(y, exo = NULL, freq = NULL, decomp = NULL,
 
 \item{exo}{Matrix of exogenous variables. Can be used to specify regression effects or other seasonal effects like holidays, etc.}
 
-\item{freq}{Seasonality of the data (1, 4, 12, 52, 365)}
+\item{freq}{Seasonality of the data (1, 4, 12, 52, 365)
+#' @param full_seas_freq Whether to use the full range of seasonal frequencies or the default truncated case for higher frequency data}
 
 \item{decomp}{Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")}
 
@@ -23,6 +24,8 @@ tcs_decomp_estim(y, exo = NULL, freq = NULL, decomp = NULL,
 "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.}
 
 \item{multiplicative}{If data should be logged to create a multiplicative model}
+
+\item{boxcox}{Whether to power transform the data}
 
 \item{det_obs}{Set the observation equation error variance to 0 (deterministic observation equation)}
 
@@ -33,15 +36,6 @@ tcs_decomp_estim(y, exo = NULL, freq = NULL, decomp = NULL,
 \item{det_cycle}{Set thecycle error variance to 0 (deterministic cycle)}
 
 \item{det_drift}{Set the drift error variance to 0 (deterministic drift)}
-
-\item{full_seas_freq}{Use the full seasonality pattern instead of the truncated pattern for higher frequency data. 
-It is set to F by default for better speed with the expense of minimal accuracy loss of seasonal patters. 
-The use of Fourier series for seasonality only requires seasonal frequencies up to floor(frequency/2). 
-Yearly frequency uses no seasonality.
-Quarterly frequency uses 1:2 regardless of the state of full_seas_freq.
-Monthly frequency uses 1:6 regardless of the state of full_seas_freq.
-Weekly frequency uses c(1, 2, 3, 4, 8, 12, 16, 21, 26) seasonaly frequencies by default. When full_freq = T, it will use 1:26.
-Daily frequency uses c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182) seasonal frequencies by default. When full_freq == T, it will use 1:182.}
 
 \item{wavelet.method}{Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".}
 
@@ -75,13 +69,12 @@ tcs_decomp_estim(y = DT[, c("date", "y")])
 If multiplicative = T, then the data is logged and the original model becomes multiplicative (Y_t = T_t * C_t * S_t * BX_t * e_t)
 If trend is "rw", the trend model is T_t = T_{t-1} + e_t, e_t ~ N(0, sig_t^2)
 If trend is "rwd", the trend model is T_t = M_{t-1} + T_{t-1} + e_t, e_t ~ N(0, sig_t^2) with 
-     M_t = (1 - phi)*M_bar + phi*M_{t-1} + n_t, n_t ~ N(0, sig_m^2) where
-     phi is the dampening parameter and M_bar the mean of the drift. 
+     M_t = M_{t-1} + n_t, n_t ~ N(0, sig_m^2) where
 If trend is "2rw", the trend model is T_t = 2T_{t-1} - T_{t-2} + e_t, e_t ~ N(0, sig_t^2)
 If det_obs = T then sig_e is set to 0 
 If det_trend = T then the variacne of the trend (sig_t) is set to 0 and is referred to as a smooth trend
 If det_drift = T then the variance of the drift (sig_m) is set to 0 and is refereed to as a deterministic drift
-If det_seas = T then the variance all seasonality frequencies j (sig_j) are set to 0 and is referred to as deterministic seasonality
+If det_seas = T then the variance all seasonality frequencies j (sig_s) are set to 0 and is referred to as deterministic seasonality
 If det_cycle = T then the variance of the cyclce (sig_c) is set to 0 and is refreed to as a deterministic cycle
 }
 \author{

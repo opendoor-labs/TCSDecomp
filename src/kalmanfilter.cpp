@@ -6,7 +6,7 @@
 
 // Protect against compilers without OpenMP
 #ifdef _OPENMP
-  #include <omp.h>
+#include <omp.h>
 #endif
 
 // R's implementation of the Moore-Penrose pseudo matrix inverse
@@ -63,7 +63,7 @@ Rcpp::List kalman_filter(const arma::mat B0, const arma::mat P0, const arma::mat
                          const arma::mat At, const arma::mat Ft, const arma::mat Ht, 
                          const arma::mat Qt, const arma::mat Rt, const arma::mat yt, 
                          const arma::mat X, const arma::mat beta){
-
+  
   //Define the storage matrices
   arma::mat B_tt(Ft.n_rows, yt.n_cols);
   arma::mat B_tl(B_tt.n_rows, yt.n_cols);
@@ -79,7 +79,7 @@ Rcpp::List kalman_filter(const arma::mat B0, const arma::mat P0, const arma::mat
   arma::mat B_LL = B0;
   arma::mat P_LL = P0;
   double lnl = 0.0;
-
+  
   //Kalm filter routine
   for(int i = 0; i < yt.n_cols; i++){
     B_tl.col(i) = Dt + Ft * B_LL; //Initial estimate of unobserved values conditional on t-1
@@ -98,12 +98,12 @@ Rcpp::List kalman_filter(const arma::mat B0, const arma::mat P0, const arma::mat
     B_tt.col(i) = B_tl.col(i) + K_t.slice(i) * N_t.col(i); //Final estimate of the unobserved values
     P_tt.slice(i) = P_tl.slice(i) - K_t.slice(i) * Ht * P_tl.slice(i); //Final estiamte of the covariance matrix
     lnl = lnl + 0.5*arma::as_scalar((log(det(F_t.slice(i))) +  N_t.col(i).t() * inv(F_t.slice(i)) * N_t.col(i)));
-
+    
     //Reinitialize for the next iteration
     B_LL = B_tt.col(i);
     P_LL = P_tt.slice(i);
   }
-
+  
   return Rcpp::List::create(Rcpp::Named("loglik") = -lnl,
                             Rcpp::Named("B_tl") = B_tl,
                             Rcpp::Named("B_tt") = B_tt,
@@ -119,7 +119,7 @@ Rcpp::List kalman_smoother(const arma::mat B_tl, arma::mat B_tt, const arma::cub
                            arma::cube P_tt, const arma::mat Ft){
   int t = B_tt.n_cols - 1;
   arma::mat Ptt_x_Ft_x_PtInv = P_tt.slice(t - 1) * Ft.t() * Rginv(P_tl.slice(t));
-
+  
   for(int i = t - 1; i >= 0; i--){
     Ptt_x_Ft_x_PtInv = P_tt.slice(i) * Ft.t() * Rginv(P_tl.slice(i + 1));
     B_tt.col(i) = B_tt.col(i) + Ptt_x_Ft_x_PtInv * (B_tt.col(i + 1) - B_tl.col(i + 1));

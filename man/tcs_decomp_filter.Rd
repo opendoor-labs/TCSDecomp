@@ -2,7 +2,7 @@
 % Please edit documentation in R/package_functions.R
 \name{tcs_decomp_filter}
 \alias{tcs_decomp_filter}
-\title{Kalman Filter.}
+\title{Kalman Filter}
 \usage{
 tcs_decomp_filter(model, y = NULL, exo = NULL, plot = F)
 }
