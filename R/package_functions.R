@@ -275,36 +275,6 @@ tcs_build_dates = function(y){
   return(dates)
 }
 
-#' Box-Cox Transformation
-#' 
-#' Fits a Box-Cox transformation and transformations the data
-#' @param y A univariate time series
-#' @param test Whether to perform the test to select the best power transformation parameter
-#' @param reverse Wheter to perform the reverse transformation
-#' @param lambda The Box-Cox power parameter
-#' @export
-tcs_boxcox = function(y, test = T, reverse = F, lambda = NULL, plot = F){
-  if(test == T & is.null(lambda)){
-    test = data.table(y = y, t = 1:length(y))
-    bc = MASS::boxcox(y ~ t, data = test, plot = plot, lambda = seq(-10, 10, 0.01))
-    lambda = bc$x[which.max(bc$y)]
-  }
-  if(lambda != 0){
-    if(reverse == F){
-      trans = (y^lambda - 1)/lambda
-    }else{
-      trans = (y*lambda + 1)^(1/lambda)
-    }
-  }else{
-    if(reverse == F){
-      trans = log(y)
-    }else{
-      trans = exp(y)
-    }
-  }
-  return(list(data = trans, lambda = lambda))
-}
-
 #' Trend cycle seasonal decomposition using the Kalman filter.
 #' 
 #' Estimates a structural time series model using the Kalman filter and maximum likelihood.
@@ -329,7 +299,6 @@ tcs_boxcox = function(y, test = T, reverse = F, lambda = NULL, plot = F){
 #' @param trend_spec Trend specification ("rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
 #' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
 #' @param multiplicative If data should be logged to create a multiplicative model
-#' @param boxcox Whether to power transform the data
 #' @param optim_methods Vector of 1 to 3 optimization methods in order of preference ("NR", "BFGS", "CG", "BHHH", or "SANN")
 #' @param det_obs Set the observation equation error variance to 0 (deterministic observation equation)
 #' @param det_trend Set the trend error variance to 0 (deterministic trend)
@@ -355,7 +324,7 @@ tcs_boxcox = function(y, test = T, reverse = F, lambda = NULL, plot = F){
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, decomp = NULL, trend_spec = NULL,
-                             multiplicative = F, boxcox = F,
+                             multiplicative = F,
                              det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
                              wavelet.method = "ARIMA", wavelet.sim = 100, 
                              level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 10000){
@@ -404,13 +373,10 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     wave = NULL
   }
   
-  if(boxcox == T){
-    y = tcs_boxcox(y)
-    lambda = y$lambda
-    y = y$data
-  }else{
-    lambda = NA
-  }
+  #Standardize
+  mean = mean(y, na.rm = T)
+  sd = sd(y, na.rm = T)
+  y = (y - mean)/sd
   
   #Define the trend specifications to estiamte
   if(is.null(trend_spec)) {
@@ -552,7 +518,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     if(!is.null(out)){
       #Retreive the model output
       ret = data.table::data.table(model = i, freq = freq, full_seas_freq = full_seas_freq, decomp = decomp, multiplicative = multiplicative, 
-                                   boxcox = lambda, convergence = out$code, loglik = out$maximum,
+                                   convergence = out$code, loglik = out$maximum,
                                    matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
       if(is.null(exo)){
         ret[, colnames(ret)[grepl("beta_", colnames(ret))] := NULL]
@@ -564,12 +530,9 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
   snow::stopCluster(cl)
   
   #Select the best model based on the maximum likelihood
-  fit = list(table = fit[loglik == max(loglik, na.rm = T), ], data = y, dates = dates)
+  fit = list(table = fit[loglik == max(loglik, na.rm = T), ], data = y*sd + mean, dates = dates)
   if(multiplicative == T){
     fit$data = exp(fit$data)
-  }
-  if(boxcox == T){
-    fit$data = tcs_boxcox(y = y, lambda = lambda, reverse = T, test = F)$data
   }
   if(exists("wave")){
     fit[["wavelet"]] = wave
@@ -627,9 +590,11 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   if(model$table$multiplicative == T){
     y = log(y)
   }
-  if(!is.na(model$table$boxcox)){
-    y = tcs_boxcox(y = model$data, lambda = model$table$lambda)$data
-  }
+  
+  #Standardize
+  y_mean = mean(y, na.rm = T)
+  y_sd = sd(y, na.rm = T)
+  y = (y - y_mean)/y_sd
   
   #Find any missing values
   if(any(is.na(y))){
@@ -747,12 +712,25 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   final = rbind(data.table(method = "filter", date = dates, preret[["filter"]]), 
                 data.table(method = "smooth", date = dates, preret[["smooth"]]), 
                 use.names = T, fill = T)[, "date" := as.Date(date)]
+
+  final[, c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted") := lapply(.SD, function(x){x*y_sd + y_mean}), 
+        .SDcols = c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted"), by = "method"]
+  final[, c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
+            "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error") := lapply(.SD, function(x){x*y_sd}), 
+        .SDcols = c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
+                    "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error"), by = "method"]
+  
+  if(model$table$multiplicative == T){
+    final[, c(colnames(final)[!colnames(final) %in% c("method", "date")]) := lapply(.SD, exp),
+          .SDcols = c(colnames(final)[!colnames(final) %in% c("method", "date")])]
+  }
+  
   if(plot == T) {
     for(i in c("filter", "smooth")){
       g1 = ggplot2::ggplot(data.table::melt(final[method == i, ], id.vars = "date", measure.vars = c("y", "trend"))) + 
         ggplot2::ggtitle("Actual vs Trend") +
         ggplot2::scale_x_date(name = "Date") +
-        ggplot2::scale_y_continuous(name = paste0("Value", ifelse(model$table$multiplicative == T, " (log)", ""))) +
+        ggplot2::scale_y_continuous(name = "Value") +
         ggplot2::geom_line(ggplot2::aes(x = date, y = value, group = variable, color = variable)) + ggplot2::theme_minimal() + 
         ggplot2::guides(color = ggplot2::guide_legend(title = NULL)) + 
         ggplot2::theme(legend.position = "bottom")
@@ -761,7 +739,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
       g2 = ggplot2::ggplot(data.table::melt(final[method == i, ], id.vars = "date", measure.vars = c("cycle", "seasonal", "observation_error"))) + 
         ggplot2::ggtitle(paste(title, collapse = ", ")) + 
         ggplot2::scale_x_date(name = "Date") +
-        ggplot2::scale_y_continuous(paste0("Value", ifelse(model$table$multiplicative == T, " (log)", ""))) +
+        ggplot2::scale_y_continuous(name = "Value") +
         ggplot2::geom_line(ggplot2::aes(x = date, y = value, group = variable, color = variable)) + 
         ggplot2::theme_minimal() + ggplot2::guides(color = ggplot2::guide_legend(title = NULL)) + 
         ggplot2::theme(legend.position = "bottom")
@@ -780,11 +758,6 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     }
   }
   snow::stopCluster(cl)
-  
-  if(model$table$multiplicative == T){
-    final[, c(colnames(final)[!colnames(final) %in% c("method", "date")]) := lapply(.SD, exp),
-          .SDcols = c(colnames(final)[!colnames(final) %in% c("method", "date")])]
-  }
   return(final)
 }
 
