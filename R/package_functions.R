@@ -456,6 +456,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     }else{
       X = t(exo)
       par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
+      par[grepl("beta_", names(par))] = 0
     }
     
     #Define the objective function
@@ -523,6 +524,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
       if(is.null(exo)){
         ret[, colnames(ret)[grepl("beta_", colnames(ret))] := NULL]
       }
+      return(ret)
     }else{
       return(NULL)
     }
@@ -629,12 +631,6 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   if(!is.null(na_locs)){
     fc = sp$Ht %*% ans$B_tt
     y[na_locs] = fc[, na_locs]
-    ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
-                        yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
-  }
-  if(!is.null(na_locs)){
-    fc = sp$Ht %*% ans$B_tt
-    y[na_locs] = fc[, na_locs]
     ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, yt = matrix(y, nrow = 1))
   }
   rownames(ans$B_tt) = rownames(sp$Ft)
@@ -704,6 +700,14 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     toret[, `:=`("cycle_adjusted", y - cycle)]
     toret[, `:=`("seasonal_cycle_adjusted", y - seasonal - cycle)]
     toret[, `:=`("seasonal_cycle", cycle + seasonal)]
+    
+    if(!is.null(exo) | !all(is.na(model$exo))){
+      XB = do.call("cbind", lapply(names(cs)[grepl("beta_", names(cs))], function(x){
+        cs[x]*X[gsub("beta_\\.", "", x), ]
+      }))
+      colnames(XB) = rownames(X)
+      toret = cbind(toret, XB)
+    }
     return(toret)
   }
   names(preret) = iter
@@ -713,12 +717,11 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
                 data.table(method = "smooth", date = dates, preret[["smooth"]]), 
                 use.names = T, fill = T)[, "date" := as.Date(date)]
 
-  final[, c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted") := lapply(.SD, function(x){x*y_sd + y_mean}), 
-        .SDcols = c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted"), by = "method"]
-  final[, c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
-            "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error") := lapply(.SD, function(x){x*y_sd}), 
-        .SDcols = c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
-                    "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error"), by = "method"]
+  cols = c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted")
+  final[, c(cols) := lapply(.SD, function(x){x*y_sd + y_mean}), .SDcols = c(cols), by = "method"]
+  cols = c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
+           "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error", rownames(X))
+  final[,  c(cols) := lapply(.SD, function(x){x*y_sd}), .SDcols = c(cols), by = "method"]
   
   if(model$table$multiplicative == T){
     final[, c(colnames(final)[!colnames(final) %in% c("method", "date")]) := lapply(.SD, exp),
