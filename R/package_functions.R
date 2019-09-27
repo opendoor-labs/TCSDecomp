@@ -456,7 +456,6 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     }else{
       X = t(exo)
       par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
-      par[grepl("beta_", names(par))] = 0
     }
     
     #Define the objective function
