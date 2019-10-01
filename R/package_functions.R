@@ -1,11 +1,11 @@
 #' State space model
 #' Creates a state space model in list form
-#' yt = Ht %*% Bt + e_t
-#' Bt = Ft %*% B_{t=1} + u_t
+#' yt = Ht * Bt + e_t
+#' Bt = Ft * B_{t-1} + u_t
 #'
 #' @param par Vector of named parameter values
 #' @param yt Univariate time series of data values
-#' @param freq Seasonality of the data (1, 4, 12, 53, 365)
+#' @param freq Seasonality of the data (1, 4, 12, 52, 365)
 #' @param decomp Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")
 #' @param trend_spec Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
 #' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
@@ -14,7 +14,6 @@
 #' @examples
 #' tcs_ssm(par, y, freq, decomp, trend_spec, init)
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
-#' @export
 tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec = NULL, 
                    init = NULL, model = NULL, full_seas_freq = F){
   if(!is.null(model)){
@@ -716,10 +715,10 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
                 data.table(method = "smooth", date = dates, preret[["smooth"]]), 
                 use.names = T, fill = T)[, "date" := as.Date(date)]
 
-  cols = c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted")
+  cols = colnames(final)[colnames(final) %in% c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted")]
   final[, c(cols) := lapply(.SD, function(x){x*y_sd + y_mean}), .SDcols = c(cols), by = "method"]
-  cols = c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
-           "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error", rownames(X))
+  cols = colnames(final)[colnames(final) %in% c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
+           "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error", rownames(X))]
   final[,  c(cols) := lapply(.SD, function(x){x*y_sd}), .SDcols = c(cols), by = "method"]
   
   if(model$table$multiplicative == T){

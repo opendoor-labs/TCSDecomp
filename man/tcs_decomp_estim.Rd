@@ -5,7 +5,7 @@
 \title{Trend cycle seasonal decomposition using the Kalman filter.}
 \usage{
 tcs_decomp_estim(y, exo = NULL, freq = NULL, full_seas_freq = F,
-  decomp = NULL, trend_spec = NULL, multiplicative = F, boxcox = F,
+  decomp = NULL, trend_spec = NULL, multiplicative = F,
   det_obs = F, det_trend = F, det_seas = F, det_cycle = F,
   det_drift = F, wavelet.method = "ARIMA", wavelet.sim = 100,
   level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 10000)
@@ -24,8 +24,6 @@ tcs_decomp_estim(y, exo = NULL, freq = NULL, full_seas_freq = F,
 "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.}
 
 \item{multiplicative}{If data should be logged to create a multiplicative model}
-
-\item{boxcox}{Whether to power transform the data}
 
 \item{det_obs}{Set the observation equation error variance to 0 (deterministic observation equation)}
 
