@@ -14,10 +14,11 @@
 #' @examples
 #' tcs_ssm(par, y, freq, decomp, trend_spec, init)
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
+#' @export
 tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec = NULL, 
                    init = NULL, model = NULL, full_seas_freq = F){
   if(!is.null(model)){
-    par = unlist(model$table[, grepl("coef_", colnames(mod$table)), with = F])
+    par = unlist(model$table[, grepl("coef_", colnames(model$table)), with = F])
     names(par) = gsub("coef_", "", names(par))
     yt = model$data
     freq = model$table$freq
