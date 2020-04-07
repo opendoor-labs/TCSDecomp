@@ -644,8 +644,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   preret = foreach::foreach(i = iter, .packages = c("data.table")) %fun% {
     if(i == "filter"){
       B_tt = ans$B_tt
-    }
-    else if(i == "smooth"){
+    }else if(i == "smooth"){
       B_tt = smooth
     }
     
@@ -692,7 +691,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     toret[, `:=`("trend_pred", trend - trend_error)]
     toret[, `:=`("cycle_pred", cycle - cycle_error)]
     toret[, `:=`("seasonal_pred", seasonal - seasonal_error)]
-    toret[, `:=`("noise_adjusted" := y - observation_error)]
+    toret[, `:=`("noise_adjusted", y - observation_error)]
     
     #Calculate adusted series
     toret[, `:=`("seasonal_adjusted", y - seasonal)]
