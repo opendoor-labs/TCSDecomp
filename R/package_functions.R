@@ -701,7 +701,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     toret[, `:=`("seasonal_noise_adjusted", trend_pred + cycle_pred)]
     toret[, `:=`("cycle_noise_adjusted",  trend_pred + seasonal_pred)]
     toret[, `:=`("seasonal_cycle_noise_adjusted", trend_pred)]
-    toret[, `:=`("noise_adjusted", tred_pred + seasonal_pred + cycle_pred)]
+    toret[, `:=`("noise_adjusted", trend_pred + seasonal_pred + cycle_pred)]
     
     if(!is.null(exo) | !all(is.na(model$exo))){
       XB = do.call("cbind", lapply(names(cs)[grepl("beta_", names(cs))], function(x){
