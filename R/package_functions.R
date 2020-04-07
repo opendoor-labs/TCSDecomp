@@ -16,7 +16,7 @@
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec = NULL, 
-                   init = NULL, model = NULL, full_seas_freq = F){
+                   init = NULL, model = NULL, full_seas_freq = F, seas_freqs = NULL){
   if(!is.null(model)){
     par = unlist(model$table[, grepl("coef_", colnames(model$table)), with = F])
     names(par) = gsub("coef_", "", names(par))
@@ -27,13 +27,15 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     full_seas_freq = model$table$full_seas_freq
   }
   
-  #Define the seasonal frequencies
-  if(full_seas_freq == T | freq %in% c(1, 4, 12)){
-    seas_freqs = 1:(floor(freq/2))
-  }else if(freq == 52){
-    seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 21, 26)
-  }else if(freq == 365){
-    seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
+  if(is.null(seas_freqs)){
+    #Define the seasonal frequencies
+    if(full_seas_freq == T | freq %in% c(1, 4, 12)){
+      seas_freqs = 1:(floor(freq/2))
+    }else if(freq == 52){
+      seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 21, 26)
+    }else if(freq == 365){
+      seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
+    }
   }
   
   yt = matrix(yt, nrow = 1)
@@ -324,7 +326,7 @@ tcs_build_dates = function(y){
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, decomp = NULL, trend_spec = NULL,
-                             multiplicative = F,
+                             multiplicative = F, par = NULL, seas_freqs, 
                              det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
                              wavelet.method = "ARIMA", wavelet.sim = 100, 
                              level = 0.01, optim_methods = c("BFGS", "NM", "CG"), maxit = 10000){
@@ -388,22 +390,9 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     iter = trend_spec
   }
   
-  cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
-  doSNOW::registerDoSNOW(cl)
-  invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
-  `%fun%` = foreach::`%dopar%`
-  fit = foreach::foreach(i = iter, .combine = function(DT1, DT2){rbind(DT1, DT2, use.names = T, fill = T)},
-                         .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("tcs_ssm", "kalman_filter", "kalman_smoother")) %fun% {
-    #Set up the initial values
-    if(i == "rw"){
-      par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
-    }else if(i %in% c("rwd", "2rw")){
-      par = c(sig_t = sqrt(1/7 * var(diff(diff(y)), na.rm = T)))
-      if(i == "rwd"){
-        par = c(par, sig_m = unname(par["sig_t"]))
-      }
-    }
-    if(grepl("seasonal", decomp)){
+  #Get seasonal frequencies
+  if(grepl("seasonal", decomp)){
+    if(is.null(seas_freqs)){
       if(full_seas_freq == T | freq %in% c(1, 4, 12)){
         seas_freqs = 1:(floor(freq)/2)
       }else if(freq == 52){
@@ -411,57 +400,78 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
       }else if(freq == 365){
         seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
       }
-      par = c(par, sig_s = unname(rep(par["sig_t"]/(2 * length(seas_freqs)), length(seas_freqs))))
-      names(par)[grepl("sig_s", names(par))] = paste0("sig_s", seas_freqs)
     }
-    if(grepl("cycle", decomp)){
-      if(!is.null(wave)){
-        period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
-      }else{
-        period = 5*freq
+  }
+  
+  cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
+  doSNOW::registerDoSNOW(cl)
+  invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
+  `%fun%` = foreach::`%dopar%`
+  fit = foreach::foreach(i = iter, .combine = function(DT1, DT2){rbind(DT1, DT2, use.names = T, fill = T)},
+                         .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("tcs_ssm", "kalman_filter", "kalman_smoother")) %fun% {
+    #Set up the initial values
+    if(is.null(par)){
+      if(i == "rw"){
+        par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
+      }else if(i %in% c("rwd", "2rw")){
+        par = c(sig_t = sqrt(1/7 * var(diff(diff(y)), na.rm = T)))
+        if(i == "rwd"){
+          par = c(par, sig_m = unname(par["sig_t"]))
+        }
       }
-      par = c(par, lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
-    }
-    if(grepl("seasonal|cycle", decomp)){
-      par = c(par, sig_e = unname(par["sig_t"]))
-    }
-    
-    #Set any fixed parameters
-    fixed = NULL
-    if(det_obs == T){
-      par["sig_e"] = 0
-      fixed = c(fixed, "sig_e")
-    }
-    if(det_trend == T){
-      par["sig_t"] = 0
-      fixed = c(fixed, "sig_t")
-    }
-    if(det_seas == T){
-      par[grepl("sig_s", names(par))] = 0
-      fixed = c(fixed, names(par)[grepl("sig_s", names(par))])
-    }
-    if(det_cycle == T){
-      par["sig_c"] = 0
-      fixed = c(fixed, "sig_c")
-    }
-    if(det_drift == T){
-      par["sig_m"] = 0
-      fixed = c(fixed, "sig_m")
-    }
-    if(is.null(exo)){
-      X = t(matrix(0, nrow = length(y), ncol = 1))
-      rownames(X) = "X"
-      par = c(par, beta_X = 0)
-      fixed = c(fixed, "beta_X")
-    }else{
-      X = t(exo)
-      par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
+      if(grepl("seasonal", decomp)){
+        par = c(par, sig_s = unname(rep(par["sig_t"]/(2 * length(seas_freqs)), length(seas_freqs))))
+        names(par)[grepl("sig_s", names(par))] = paste0("sig_s", seas_freqs)
+      }
+      if(grepl("cycle", decomp)){
+        if(!is.null(wave)){
+          period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
+        }else{
+          period = 5*freq
+        }
+        par = c(par, lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
+      }
+      if(grepl("seasonal|cycle", decomp)){
+        par = c(par, sig_e = unname(par["sig_t"]))
+      }
+      
+      #Set any fixed parameters
+      fixed = NULL
+      if(det_obs == T){
+        par["sig_e"] = 0
+        fixed = c(fixed, "sig_e")
+      }
+      if(det_trend == T){
+        par["sig_t"] = 0
+        fixed = c(fixed, "sig_t")
+      }
+      if(det_seas == T){
+        par[grepl("sig_s", names(par))] = 0
+        fixed = c(fixed, names(par)[grepl("sig_s", names(par))])
+      }
+      if(det_cycle == T){
+        par["sig_c"] = 0
+        fixed = c(fixed, "sig_c")
+      }
+      if(det_drift == T){
+        par["sig_m"] = 0
+        fixed = c(fixed, "sig_m")
+      }
+      if(is.null(exo)){
+        X = t(matrix(0, nrow = length(y), ncol = 1))
+        rownames(X) = "X"
+        par = c(par, beta_X = 0)
+        fixed = c(fixed, "beta_X")
+      }else{
+        X = t(exo)
+        par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
+      }
     }
     
     #Define the objective function
     objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
       yt = matrix(get("y"), nrow = 1)
-      sp = tcs_ssm(par = par, yt = yt, freq = freq, decomp = decomp, 
+      sp = tcs_ssm(par = par, yt = yt, freq = freq, decomp = decomp, seas_freqs = seas_freqs,
                    trend_spec = trend_spec, init = init, full_seas_freq = full_seas_freq)
       ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                           yt = yt, X = X, beta = sp$beta)
@@ -476,7 +486,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     }
     
     #Get initial values for Kalman Filter
-    sp = tcs_ssm(par = par, yt = y, freq = freq, decomp = decomp, trend_spec = i, full_seas_freq = full_seas_freq)
+    sp = tcs_ssm(par = par, yt = y, freq = freq, decomp = decomp, trend_spec = i, full_seas_freq = full_seas_freq, seas_freqs = seas_freqs)
     init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                          yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
     init2 = tryCatch(kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft), 
@@ -505,7 +515,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
                                              finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
                                              freq = freq, decomp = decomp, trend_spec = i),
                               error = function(err){
-                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = "nr", fixed = fixed, 
+                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed, 
                                                         finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
                                                         freq = freq, decomp = decomp, trend_spec = i),
                                          error = function(err){NULL})
@@ -516,8 +526,8 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     
     if(!is.null(out)){
       #Retreive the model output
-      ret = data.table::data.table(model = i, freq = freq, full_seas_freq = full_seas_freq, decomp = decomp, multiplicative = multiplicative, 
-                                   convergence = out$code, loglik = out$maximum,
+      ret = data.table::data.table(model = i, freq = freq, full_seas_freq = full_seas_freq, seas_freqs = paste(seas_freqs, collapse = ", "), 
+                                   decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
                                    matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
       if(is.null(exo)){
         ret[, colnames(ret)[grepl("beta_", colnames(ret))] := NULL]
@@ -611,6 +621,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   decomp = model$table$decomp
   trend_spec = model$table$model
   full_seas_freq = model$table$full_seas_freq
+  seas_freqs = as.numeric(strsplit(model$table$seas_freqs, ", ")[[1]])
   
   #Get the coefficients
   cs = unlist(model$table[, grepl("coef_", colnames(model$table)), with = F])
@@ -618,12 +629,12 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   names(cs) = gsub("coef_", "", names(cs))
   
   #Filter the data
-  sp = tcs_ssm(par = cs, yt = y, freq = freq, decomp = decomp, trend_spec = trend_spec, full_seas_freq = full_seas_freq)
+  sp = tcs_ssm(par = cs, yt = y, freq = freq, decomp = decomp, trend_spec = trend_spec, full_seas_freq = full_seas_freq, seas_freqs = seas_freqs)
   init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                        yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
   init = kalman_smoother(B_tl = init$B_tl, B_tt = init$B_tt, P_tl = init$P_tl, P_tt = init$P_tt, Ft = sp$Ft)
   init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
-  sp = tcs_ssm(par = cs, yt = y, freq = freq, decomp = decomp, trend_spec = trend_spec, init = init, full_seas_freq = full_seas_freq)
+  sp = tcs_ssm(par = cs, yt = y, freq = freq, decomp = decomp, trend_spec = trend_spec, init = init, full_seas_freq = full_seas_freq, seas_freqs = seas_freqs)
   ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                       yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
   if(!is.null(na_locs)){
