@@ -691,7 +691,6 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     toret[, `:=`("trend_pred", trend - trend_error)]
     toret[, `:=`("cycle_pred", cycle - cycle_error)]
     toret[, `:=`("seasonal_pred", seasonal - seasonal_error)]
-    toret[, `:=`("noise_adjusted", y - observation_error)]
     
     #Calculate adusted series
     toret[, `:=`("seasonal_adjusted", y - seasonal)]
@@ -702,6 +701,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     toret[, `:=`("seasonal_noise_adjusted", trend_pred + cycle_pred)]
     toret[, `:=`("cycle_noise_adjusted",  trend_pred + seasonal_pred)]
     toret[, `:=`("seasonal_cycle_noise_adjusted", trend_pred)]
+    toret[, `:=`("noise_adjusted", tred_pred + seasonal_pred + cycle_pred)]
     
     if(!is.null(exo) | !all(is.na(model$exo))){
       XB = do.call("cbind", lapply(names(cs)[grepl("beta_", names(cs))], function(x){
