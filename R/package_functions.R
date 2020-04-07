@@ -326,7 +326,7 @@ tcs_build_dates = function(y){
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, decomp = NULL, trend_spec = NULL,
-                             multiplicative = F, par = NULL, seas_freqs, 
+                             multiplicative = F, par = NULL, seas_freqs = NULL, 
                              det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
                              wavelet.method = "ARIMA", wavelet.sim = 100, 
                              level = 0.01, optim_methods = c("BFGS", "NM", "CG"), maxit = 10000){
