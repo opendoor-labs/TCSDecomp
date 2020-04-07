@@ -719,7 +719,9 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
                 data.table(method = "smooth", date = dates, preret[["smooth"]]), 
                 use.names = T, fill = T)[, "date" := as.Date(date)]
 
-  cols = colnames(final)[colnames(final) %in% c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted")]
+  cols = colnames(final)[colnames(final) %in% c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted", 
+                                                "seasonal_noise_adjusted", "cycle_noise_adjusted", "seasonal_cycle_noise_adjusted", 
+                                                "noise_adjusted")]
   final[, c(cols) := lapply(.SD, function(x){x*y_sd + y_mean}), .SDcols = c(cols), by = "method"]
   cols = colnames(final)[colnames(final) %in% c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
            "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error", rownames(X))]
