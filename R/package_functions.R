@@ -434,30 +434,29 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
       if(grepl("seasonal|cycle", decomp)){
         par = c(par, sig_e = unname(par["sig_t"]))
       }
-      
-      #Set any fixed parameters
-      fixed = NULL
-      if(det_obs == T){
-        par["sig_e"] = 0
-        fixed = c(fixed, "sig_e")
-      }
-      if(det_trend == T){
-        par["sig_t"] = 0
-        fixed = c(fixed, "sig_t")
-      }
-      if(det_seas == T){
-        par[grepl("sig_s", names(par))] = 0
-        fixed = c(fixed, names(par)[grepl("sig_s", names(par))])
-      }
-      if(det_cycle == T){
-        par["sig_c"] = 0
-        fixed = c(fixed, "sig_c")
-      }
-      if(det_drift == T){
-        par["sig_m"] = 0
-        fixed = c(fixed, "sig_m")
-      }
     }
+   #Set any fixed parameters
+   fixed = NULL
+   if(det_obs == T){
+     par["sig_e"] = 0
+     fixed = c(fixed, "sig_e")
+   }
+   if(det_trend == T){
+     par["sig_t"] = 0
+     fixed = c(fixed, "sig_t")
+   }
+   if(det_seas == T){
+     par[grepl("sig_s", names(par))] = 0
+     fixed = c(fixed, names(par)[grepl("sig_s", names(par))])
+   }
+   if(det_cycle == T){
+     par["sig_c"] = 0
+     fixed = c(fixed, "sig_c")
+   }
+   if(det_drift == T){
+     par["sig_m"] = 0
+     fixed = c(fixed, "sig_m")
+   }
     if(is.null(exo)){
       X = t(matrix(0, nrow = length(y), ncol = 1))
       rownames(X) = "X"
