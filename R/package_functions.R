@@ -457,15 +457,15 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
         par["sig_m"] = 0
         fixed = c(fixed, "sig_m")
       }
-      if(is.null(exo)){
-        X = t(matrix(0, nrow = length(y), ncol = 1))
-        rownames(X) = "X"
-        par = c(par, beta_X = 0)
-        fixed = c(fixed, "beta_X")
-      }else{
-        X = t(exo)
-        par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
-      }
+    }
+    if(is.null(exo)){
+      X = t(matrix(0, nrow = length(y), ncol = 1))
+      rownames(X) = "X"
+      par = c(par, beta_X = 0)
+      fixed = c(fixed, "beta_X")
+    }else{
+      X = t(exo)
+      par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
     }
     
     #Define the objective function
