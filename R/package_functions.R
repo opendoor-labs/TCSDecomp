@@ -327,7 +327,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
                              multiplicative = F,
                              det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
                              wavelet.method = "ARIMA", wavelet.sim = 100, 
-                             level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 10000){
+                             level = 0.01, optim_methods = c("BFGS", "NM", "CG"), maxit = 10000){
   if(level < 0.01 | level > 0.1){
     stop("level must be between 0.01 and 0.1.")
   }
@@ -476,7 +476,6 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     }
     
     #Get initial values for Kalman Filter
-    #Get initial values for Kalman Filter
     sp = tcs_ssm(par = par, yt = y, freq = freq, decomp = decomp, trend_spec = i, full_seas_freq = full_seas_freq)
     init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                          yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
@@ -506,7 +505,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
                                              finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
                                              freq = freq, decomp = decomp, trend_spec = i),
                               error = function(err){
-                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed, 
+                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = "nr", fixed = fixed, 
                                                         finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
                                                         freq = freq, decomp = decomp, trend_spec = i),
                                          error = function(err){NULL})
@@ -699,6 +698,12 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     toret[, `:=`("cycle_adjusted", y - cycle)]
     toret[, `:=`("seasonal_cycle_adjusted", y - seasonal - cycle)]
     toret[, `:=`("seasonal_cycle", cycle + seasonal)]
+    
+    #Calculate adusted series
+    toret[, `:=`("seasonal_noise_adjusted", trend_pred + seasonal_pred)]
+    toret[, `:=`("cycle_noise_adjusted",  tred_pred + cycle_pred)]
+    toret[, `:=`("seasonal_cycle_noise_adjusted", tred_pred + seasonal_pred + cycle_pred)]
+    toret[, `:=`("seasonal_cycle_noise_adjusted", cycle_pred + seasonal_pred)]
     
     if(!is.null(exo) | !all(is.na(model$exo))){
       XB = do.call("cbind", lapply(names(cs)[grepl("beta_", names(cs))], function(x){
