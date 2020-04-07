@@ -701,8 +701,8 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     
     #Calculate adusted series
     toret[, `:=`("seasonal_noise_adjusted", trend_pred + seasonal_pred)]
-    toret[, `:=`("cycle_noise_adjusted",  tred_pred + cycle_pred)]
-    toret[, `:=`("seasonal_cycle_noise_adjusted", tred_pred + seasonal_pred + cycle_pred)]
+    toret[, `:=`("cycle_noise_adjusted",  trend_pred + cycle_pred)]
+    toret[, `:=`("seasonal_cycle_noise_adjusted", trend_pred + seasonal_pred + cycle_pred)]
     toret[, `:=`("seasonal_cycle_noise_adjusted", cycle_pred + seasonal_pred)]
     
     if(!is.null(exo) | !all(is.na(model$exo))){
