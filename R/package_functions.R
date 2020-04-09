@@ -576,6 +576,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
   }
   
   #Estimate the model
+  message("Estimating the model...")
   for(o in optim_methods){
     out = tryCatch(maxLik::maxLik(logLik = objective, 
                                   start = par, method = o, fixed = fixed, 
