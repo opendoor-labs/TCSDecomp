@@ -697,7 +697,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
       colnames(seasonalities)[colnames(seasonalities) == "St12"] = "monthly_seas"
       colnames(seasonalities)[colnames(seasonalities) == "St52"] = "weekly_seas"
       colnames(seasonalities)[grepl("St", colnames(seasonalities))] = 
-        paste0(gsub("St", "", colnames(seasonalities)[grepl("St", colnames(seasonalities))]), "_seas")
+        paste0(colnames(seasonalities)[grepl("St", colnames(seasonalities))], "_seas")
       
       seasonality_errors = t(errors[grepl("St", rownames(errors)) & !grepl("Sts", rownames(errors)), ])
       colnames(seasonality_errors) = paste0(colnames(seasonalities), "_error")
