@@ -16,7 +16,7 @@
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec = NULL, 
-                   init = NULL, model = NULL, full_seas_freq = F, seas_freqs = NULL){
+                   init = NULL, model = NULL, full_seas_freq = T, seas_freqs = NULL){
   if(!is.null(model)){
     par = unlist(model$table[, grepl("coef_", colnames(model$table)), with = F])
     names(par) = gsub("coef_", "", names(par))
@@ -767,6 +767,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
                                                 "noise_adjusted")]
   final[, c(cols) := lapply(.SD, function(x){x*y_sd + y_mean}), .SDcols = c(cols), by = "method"]
   cols = colnames(final)[colnames(final) %in% c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
+                                                colnames(final)[grepl("_seas|_seas_err|_seas_pred", colnames(final))],
            "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error", rownames(X))]
   final[,  c(cols) := lapply(.SD, function(x){x*y_sd}), .SDcols = c(cols), by = "method"]
   
