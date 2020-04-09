@@ -27,14 +27,18 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     full_seas_freq = model$table$full_seas_freq
   }
   
-  if(is.null(seas_freqs)){
-    #Define the seasonal frequencies
-    if(full_seas_freq == T | freq %in% c(1, 4, 12)){
-      seas_freqs = 1:(floor(freq/2))
-    }else if(freq == 52){
-      seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 21, 26)
-    }else if(freq == 365){
-      seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
+  if(grepl("seasonal", decomp)){
+    if(is.null(seas_freqs)){
+      #Define the seasonal frequencies
+      if(full_seas_freq == T){
+        seas_freqs = 1:(floor(freq/2))
+      }else{
+        #s = j => j cycles per year
+        #month of year (s=1), half of year (s=2), quarter of year (s=4), 
+        #week of month (s=12), day of week (s=52)
+        seas_freqs = c(1, 2, 4, 12, 52)
+        seas_freqs = seas_freqs[round(freq/seas_freqs) > 0]
+      }
     }
   }
   
@@ -325,11 +329,11 @@ tcs_build_dates = function(y){
 #' If det_cycle = T then the variance of the cyclce (sig_c) is set to 0 and is refreed to as a deterministic cycle
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, decomp = NULL, trend_spec = NULL,
+tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = T, decomp = NULL, trend_spec = NULL,
                              multiplicative = F, par = NULL, seas_freqs = NULL, 
                              det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
                              wavelet.method = "ARIMA", wavelet.sim = 100, 
-                             level = 0.01, optim_methods = c("BFGS", "NM", "CG"), maxit = 10000){
+                             level = 0.01, optim_methods = c("BFGS", "NM", "CG", "SANN"), maxit = 10000){
   if(level < 0.01 | level > 0.1){
     stop("level must be between 0.01 and 0.1.")
   }
@@ -393,12 +397,15 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
   #Get seasonal frequencies
   if(grepl("seasonal", decomp)){
     if(is.null(seas_freqs)){
-      if(full_seas_freq == T | freq %in% c(1, 4, 12)){
-        seas_freqs = 1:(floor(freq)/2)
-      }else if(freq == 52){
-        seas_freqs = c(1, 2, 3, 4, 8, 12, 16, 20, 24)
-      }else if(freq == 365){
-        seas_freqs = c(1, 2, 3, 4, 5, 6, 7, 14, 21, 30, 60, 90, 120, 150, 182)
+      #Define the seasonal frequencies
+      if(full_seas_freq == T){
+        seas_freqs = 1:(floor(freq/2))
+      }else{
+        #s = j => j cycles per year
+        #month of year (s=1), half of year (s=2), quarter of year (s=4), 
+        #week of month (s=12), day of week (s=52)
+        seas_freqs = c(1, 2, 4, 12, 52)
+        seas_freqs = seas_freqs[round(freq/seas_freqs) > 0]
       }
     }
   }
@@ -409,54 +416,71 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
   `%fun%` = foreach::`%dopar%`
   fit = foreach::foreach(i = iter, .combine = function(DT1, DT2){rbind(DT1, DT2, use.names = T, fill = T)},
                          .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("tcs_ssm", "kalman_filter", "kalman_smoother")) %fun% {
+    
+    
+    #Naive model
+    stl = stl(ts(y, frequency = freq), s.window = "periodic", s.degree = 2, l.degree = 1, t.degree = 1)
+    
     #Set up the initial values
     if(is.null(par)){
-      if(i == "rw"){
-        par = c(sig_t = sqrt(1/3 * var(diff(y), na.rm = T)))
-      }else if(i %in% c("rwd", "2rw")){
-        par = c(sig_t = sqrt(1/7 * var(diff(diff(y)), na.rm = T)))
-        if(i == "rwd"){
-          par = c(par, sig_m = unname(par["sig_t"]))
+      if(i %in% c("rw", "2rw")){
+        if(grepl("cycle", decomp)){
+          if(!is.null(wave)){
+            period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
+          }else{
+            period = 5*freq
+          }
+          par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/2, 
+                  lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), 
+                  sig_c = sd(diff(stl$time.series[, "trend"]))/2)
+        }else{
+          par = c(sig_t = sd(diff(stl$time.series[, "trend"])))
+        }
+      }else if(i %in% c("rwd")){
+        if(grepl("cycle", decomp)){
+          if(!is.null(wave)){
+            period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
+          }else{
+            period = 5*freq
+          }
+          par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/3, 
+                  sig_m = sd(diff(stl$time.series[, "trend"]))/3, 
+                  lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), 
+                  sig_c = sd(diff(stl$time.series[, "trend"]))/3)
+        }else{
+          par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/2, 
+                  sig_m = sd(diff(stl$time.series[, "trend"]))/2)
         }
       }
       if(grepl("seasonal", decomp)){
-        par = c(par, sig_s = unname(rep(par["sig_t"]/(2 * length(seas_freqs)), length(seas_freqs))))
+        par = c(par, sig_s = unname(rep(sd(diff(stl$time.series[, "seasonal"]))/length(seas_freqs), length(seas_freqs))))
         names(par)[grepl("sig_s", names(par))] = paste0("sig_s", seas_freqs)
       }
-      if(grepl("cycle", decomp)){
-        if(!is.null(wave)){
-          period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
-        }else{
-          period = 5*freq
-        }
-        par = c(par, lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), sig_c = unname(par["sig_t"]/2))
-      }
-      if(grepl("seasonal|cycle", decomp)){
-        par = c(par, sig_e = unname(par["sig_t"]))
-      }
+      par = c(par, sig_e = sd(stl$time.series[, "remainder"]))
     }
-   #Set any fixed parameters
-   fixed = NULL
-   if(det_obs == T){
-     par["sig_e"] = 0
-     fixed = c(fixed, "sig_e")
-   }
-   if(det_trend == T){
-     par["sig_t"] = 0
-     fixed = c(fixed, "sig_t")
-   }
-   if(det_seas == T){
-     par[grepl("sig_s", names(par))] = 0
-     fixed = c(fixed, names(par)[grepl("sig_s", names(par))])
-   }
-   if(det_cycle == T){
-     par["sig_c"] = 0
-     fixed = c(fixed, "sig_c")
-   }
-   if(det_drift == T){
-     par["sig_m"] = 0
-     fixed = c(fixed, "sig_m")
-   }
+    
+    #Set any fixed parameters
+    fixed = NULL
+    if(det_obs == T){
+      par["sig_e"] = 0
+      fixed = c(fixed, "sig_e")
+    }
+    if(det_trend == T){
+      par["sig_t"] = 0
+      fixed = c(fixed, "sig_t")
+    }
+    if(det_seas == T){
+      par[grepl("sig_s", names(par))] = 0
+      fixed = c(fixed, names(par)[grepl("sig_s", names(par))])
+    }
+    if(det_cycle == T){
+      par["sig_c"] = 0
+      fixed = c(fixed, "sig_c")
+    }
+    if(det_drift == T){
+      par["sig_m"] = 0
+      fixed = c(fixed, "sig_m")
+    }
     if(is.null(exo)){
       X = t(matrix(0, nrow = length(y), ncol = 1))
       rownames(X) = "X"
@@ -474,7 +498,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
                    trend_spec = trend_spec, init = init, full_seas_freq = full_seas_freq)
       ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                           yt = yt, X = X, beta = sp$beta)
-      if (!is.null(na_locs)) {
+      if(!is.null(na_locs)) {
         fc = sp$Ht %*% ans$B_tt
         yt[, na_locs] = fc[, na_locs]
         ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
@@ -482,18 +506,6 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
         assign("y", c(yt), .GlobalEnv)
       }
       return(ans$loglik)
-    }
-    
-    #Get initial values for Kalman Filter
-    sp = tcs_ssm(par = par, yt = y, freq = freq, decomp = decomp, trend_spec = i, full_seas_freq = full_seas_freq, seas_freqs = seas_freqs)
-    init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
-                         yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
-    init2 = tryCatch(kalman_smoother(B_tl = init[["B_tl"]], B_tt = init[["B_tt"]], P_tl = init[["P_tl"]], P_tt = init[["P_tt"]], Ft = sp$Ft), 
-                     error = function(err){NULL})
-    if(is.null(init)){
-      init = list(B0 = sp$B0, P0 = init$P0) 
-    }else{
-      init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
     }
     
     #Find anhy na values
@@ -504,23 +516,17 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = F, dec
     }
     
     #Estimate the model
-    out = tryCatch(maxLik::maxLik(logLik = objective, 
-                                  start = par, method = optim_methods[1], fixed = fixed, 
-                                  finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-                                  freq = freq, decomp = decomp, trend_spec = i), 
-                   error = function(err){
-                     tryCatch(maxLik::maxLik(logLik = objective, 
-                                             start = par, method = optim_methods[min(c(2, length(optim_methods)))], fixed = fixed, 
-                                             finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-                                             freq = freq, decomp = decomp, trend_spec = i),
-                              error = function(err){
-                                tryCatch(maxLik::maxLik(logLik = objective, start = par, method = optim_methods[min(c(3, length(optim_methods)))], fixed = fixed, 
-                                                        finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = init, na_locs = na_locs, 
-                                                        freq = freq, decomp = decomp, trend_spec = i),
-                                         error = function(err){NULL})
-                              })
-                   })
-    rm(init, init2)
+    for(o in optim_methods){
+      out = tryCatch(maxLik::maxLik(logLik = objective, 
+                                    start = par, method = o, fixed = fixed, 
+                                    finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = NULL, na_locs = na_locs, 
+                                    freq = freq, decomp = decomp, trend_spec = i), 
+                     error = function(err){NULL})
+      if(!is.null(out)){
+        break
+      }
+    }
+    suppressWarnings(rm(init, init2, o))
     gc()
     
     if(!is.null(out)){
@@ -672,7 +678,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     
     #Get the cycle and its errors
     if(any(grepl("Ct", rownames(errors)))){
-      cycle = c(sp$Ht[grepl("Ct", colnames(sp$Ht))] %*% B_tt[which(grepl("Ct", rownames(B_tt))), ])
+      cycle = c(sp$Ht[grepl("Ct", colnames(sp$Ht))] %*% B_tt[grepl("Ct", rownames(B_tt)), ])
       cycle_error = c(sp$Ht[grepl("Ct", colnames(sp$Ht))] %*% errors[grepl("Ct", rownames(errors)), ])
     }else{
       cycle = rep(0, nrow(series))
@@ -681,11 +687,25 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     
     #Get the seasonality and its errors
     if(any(grepl("St", rownames(errors)))){
-      seasonal = seasonal = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% B_tt[which(grepl("St", rownames(B_tt))), ])
+      seasonal = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% B_tt[grepl("St", rownames(B_tt)), ])
       seasonal_error = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% errors[grepl("St", rownames(errors)), ])
+      
+      seasonalities = t(B_tt[grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt)), ])
+      colnames(seasonalities)[colnames(seasonalities) == "St1"] = "yearly_seas"
+      colnames(seasonalities)[colnames(seasonalities) == "St2"] = "semiyearly_seas"
+      colnames(seasonalities)[colnames(seasonalities) == "St4"] = "quarterly_seas"
+      colnames(seasonalities)[colnames(seasonalities) == "St12"] = "monthly_seas"
+      colnames(seasonalities)[colnames(seasonalities) == "St52"] = "weekly_seas"
+      colnames(seasonalities)[grepl("St", colnames(seasonalities))] = 
+        paste0(gsub("St", "", colnames(seasonalities)[grepl("St", colnames(seasonalities))]), "_seas")
+      
+      seasonality_errors = t(errors[grepl("St", rownames(errors)) & !grepl("Sts", rownames(errors)), ])
+      colnames(seasonality_errors) = paste0(colnames(seasonalities), "_error")
     }else{
       seasonal = rep(0, nrow(series))
       seasonal_error = rep(0, ncol(errors))
+      seasonalities = rep(0, nrow(series))
+      seasonality_errors = rep(0, nrow(series))
     }
     
     #Get the observation and total errors
@@ -693,14 +713,18 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     total_error = trend_error + cycle_error + seasonal_error + observation_error
     
     #Combine the filtered series
-    toret = data.table::data.table(y = y, trend = trend, cycle = cycle, seasonal = seasonal, 
-                                   trend_error = trend_error, cycle_error = cycle_error, seasonal_error = seasonal_error, 
+    toret = data.table::data.table(y = y, trend = trend, cycle = cycle, seasonal = seasonal, seasonalities, 
+                                   trend_error = trend_error, cycle_error = cycle_error, 
+                                   seasonal_error = seasonal_error,  seasonality_errors, 
                                    observation_error = observation_error, total_error = total_error)
     
     #Filter out the errors 
     toret[, `:=`("trend_pred", trend - trend_error)]
     toret[, `:=`("cycle_pred", cycle - cycle_error)]
     toret[, `:=`("seasonal_pred", seasonal - seasonal_error)]
+    for(j in colnames(toret)[grepl("_seas", colnames(toret)) & !grepl("_error", colnames(toret))]){
+      toret[, `:=` (paste0(j, "_pred"), eval(parse(text = j)) - eval(parse(text = paste0(j, "_error"))))]
+    }
     
     #Calculate adusted series
     toret[, `:=`("seasonal_adjusted", y - seasonal)]
