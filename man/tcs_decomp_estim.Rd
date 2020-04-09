@@ -10,7 +10,7 @@ tcs_decomp_estim(
   freq = NULL,
   decomp = NULL,
   trend_spec = NULL,
-  multiplicative = F,
+  multiplicative = NULL,
   par = NULL,
   harmonics = NULL,
   det_obs = F,
@@ -22,7 +22,8 @@ tcs_decomp_estim(
   wavelet.sim = 100,
   level = 0.01,
   optim_methods = c("BFGS", "NM", "CG", "SANN"),
-  maxit = 10000
+  maxit = 10000,
+  verbose = F
 )
 }
 \arguments{

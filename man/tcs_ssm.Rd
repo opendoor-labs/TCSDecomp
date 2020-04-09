@@ -30,6 +30,8 @@ tcs_ssm(
 "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.}
 
 \item{init}{Initial state values for the Kalman filter}
+
+\item{model}{a tcs_decomp_estim model object}
 }
 \value{
 List of space space matrices

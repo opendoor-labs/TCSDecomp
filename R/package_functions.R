@@ -10,6 +10,7 @@
 #' @param trend_spec Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
 #' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
 #' @param init Initial state values for the Kalman filter
+#' @param model a tcs_decomp_estim model object
 #' @return List of space space matrices
 #' @examples
 #' tcs_ssm(par, y, freq, decomp, trend_spec, init)
@@ -458,7 +459,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
     periods = NULL
   }
   
-  #Get seasonal frequencies
+  #Get seasonal harmonics
   if(grepl("seasonal", decomp)){
     if(is.null(harmonics)){
       if(is.null(periods)){
@@ -595,16 +596,19 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
       break
     }
   }
-  suppressWarnings(rm(init, init2, o))
-  gc()
+  if(is.null(out)){
+    stop("Estimation failed.")
+  }
   
   #Retreive the model output
   fit = data.table::data.table(model = trend_spec, freq = freq, harmonics = paste(harmonics, collapse = ", "), 
                                decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
                                matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
+  
   if(is.null(exo)){
-    fit[, colnames(fit)[grepl("beta_", colnames(fit))] := NULL]
+    fit[, `:=`(colnames(fit)[grepl("beta_", colnames(fit))], NULL)]
   }
+  fit = list(table = fit, data = y*sd + mean, dates = dates)
   if(multiplicative == T){
     fit$data = exp(fit$data)
   }
