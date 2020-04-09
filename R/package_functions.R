@@ -391,7 +391,7 @@ tcs_build_dates = function(y){
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
 tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spec = NULL,
-                             multiplicative = F, par = NULL, harmonics = NULL, 
+                             multiplicative = NULL, par = NULL, harmonics = NULL, 
                              det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
                              wavelet.method = "ARIMA", wavelet.sim = 100, level = 0.01, 
                              optim_methods = c("BFGS", "NM", "CG", "SANN"), maxit = 10000, verbose = F){
@@ -422,9 +422,16 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
   }
   
   #Log data if multiplicative is T
+  if(is.null(multiplicative)){
+    if(all(y > 1)){
+      multiplicative == T
+    }else{
+      multiplicative == F
+    }
+  }
   if(multiplicative == T){
-    if(!all(y > 0)){
-      warning("A multiplicative model was specified but the data is not all positive. Reverting to linear model.")
+    if(!all(y > 1)){
+      warning("A multiplicative model was specified but the data is not all positive and > 1. Reverting to linear model.")
       multiplicative = F
     }else{
       y = log(y)
