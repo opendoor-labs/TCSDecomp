@@ -580,7 +580,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
     out = tryCatch(maxLik::maxLik(logLik = objective, 
                                   start = par, method = o, fixed = fixed, 
                                   finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = NULL, na_locs = na_locs, 
-                                  freq = freq, decomp = decomp, trend_spec = i), 
+                                  freq = freq, decomp = decomp, trend_spec = trend_spec), 
                    error = function(err){NULL})
     if(!is.null(out)){
       break
