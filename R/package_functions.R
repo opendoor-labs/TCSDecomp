@@ -423,10 +423,12 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
   
   #Log data if multiplicative is T
   if(is.null(multiplicative)){
-    if(all(y > 1)){
+    lm.data = data.table::data.table(y = y, t = 1:length(y))
+    lm = lm(y ~ t, data = lm.data)
+    if(all(y > 1) & summary(lm)$coefficients["t", "Pr(>|t|)"] <= level){
       multiplicative == T
     }else{
-      multiplicative == F
+      multiplicative = F
     }
   }
   if(multiplicative == T){
