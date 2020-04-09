@@ -129,6 +129,7 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     }
     Hm = cbind(Hm, matrix(rep(c(1, 0), length(jiter)), nrow = 1))
     colnames(Hm) = rownames(Fm)
+    Hm[, grepl("St", colnames(Hm)) & !grepl("Sts", colnames(Hm))] = abs(par[grepl("amp_s", names(par))])
     Qm = as.matrix(Matrix::bdiag(Qm, diag(unlist(lapply(jiter, function(j){rep(par[paste0("sig_s", j)], 2)})))))
     colnames(Qm) = rownames(Qm) = rownames(Fm)
   }
@@ -337,7 +338,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = T, dec
   if(level < 0.01 | level > 0.1){
     stop("level must be between 0.01 and 0.1.")
   }
-  if(any(!optim_methods %in% c("NR", "BFGS", "BHHH", "SANN", "CG", "NM")) | length(optim_methods) < 1 | length(optim_methods) > 3){
+  if(any(!optim_methods %in% c("NR", "BFGS", "BHHH", "SANN", "CG", "NM")) | length(optim_methods) < 1){
     stop("optim_methods must be a vector of length 1 to 3 containing 'NR', 'BFGS', 'BHHH', 'SANN', 'CG', or 'NM'")
   }
   if(!is.numeric(maxit)){
@@ -419,7 +420,7 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = T, dec
     
     
     #Naive model
-    stl = stl(ts(y, frequency = freq), s.window = "periodic", s.degree = 2, l.degree = 1, t.degree = 1)
+    stl = stats::stl(ts(y, frequency = freq), s.window = "periodic", s.degree = 2, l.degree = 1, t.degree = 1)
     
     #Set up the initial values
     if(is.null(par)){
@@ -455,6 +456,8 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = T, dec
       if(grepl("seasonal", decomp)){
         par = c(par, sig_s = unname(rep(sd(diff(stl$time.series[, "seasonal"]))/length(seas_freqs), length(seas_freqs))))
         names(par)[grepl("sig_s", names(par))] = paste0("sig_s", seas_freqs)
+        par = c(par, amp_s = rep(1, length(seas_freqs)))
+        names(par)[grepl("amp_s", names(par))] = paste0("amp_s", seas_freqs)
       }
       par = c(par, sig_e = sd(stl$time.series[, "remainder"]))
     }
@@ -690,7 +693,10 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
       seasonal = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% B_tt[grepl("St", rownames(B_tt)), ])
       seasonal_error = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% errors[grepl("St", rownames(errors)), ])
       
-      seasonalities = t(B_tt[grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt)), ])
+      seasonalities = t(matrix(B_tt[grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt)), ], 
+                        nrow = length(which(grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt)))), 
+                        ncol = ncol(B_tt), 
+                        dimnames = list(rownames(B_tt)[grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt))], NULL)))
       colnames(seasonalities)[colnames(seasonalities) == "St1"] = "yearly_seas"
       colnames(seasonalities)[colnames(seasonalities) == "St2"] = "semiyearly_seas"
       colnames(seasonalities)[colnames(seasonalities) == "St4"] = "quarterly_seas"
@@ -699,7 +705,10 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
       colnames(seasonalities)[grepl("St", colnames(seasonalities))] = 
         paste0(colnames(seasonalities)[grepl("St", colnames(seasonalities))], "_seas")
       
-      seasonality_errors = t(errors[grepl("St", rownames(errors)) & !grepl("Sts", rownames(errors)), ])
+      seasonality_errors = t(matrix(errors[grepl("St", rownames(errors)) & !grepl("Sts", rownames(errors)), ], 
+                                    nrow = length(which(grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt)))), 
+                                    ncol = ncol(B_tt), 
+                                    dimnames = list(rownames(B_tt)[grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt))], NULL)))
       colnames(seasonality_errors) = paste0(colnames(seasonalities), "_error")
     }else{
       seasonal = rep(0, nrow(series))
