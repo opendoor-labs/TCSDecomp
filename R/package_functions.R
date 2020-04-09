@@ -453,7 +453,6 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
     periods = decomp$periods
     trend_spec = decomp$trend_spec
     decomp = decomp$decomp
-    message("Done.")
   }else{
     wave = NULL
     periods = NULL
@@ -598,7 +597,6 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
   }
   suppressWarnings(rm(init, init2, o))
   gc()
-  message("Done.")
   
   #Retreive the model output
   fit = data.table::data.table(model = trend_spec, freq = freq, harmonics = paste(harmonics, collapse = ", "), 
@@ -862,7 +860,6 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     final[, c(colnames(final)[!colnames(final) %in% c("method", "date")]) := lapply(.SD, exp),
           .SDcols = c(colnames(final)[!colnames(final) %in% c("method", "date")])]
   }
-  message("Done.")
   
   if(plot == T) {
     for(i in c("filter", "smooth")){
