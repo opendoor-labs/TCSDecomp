@@ -22,7 +22,8 @@ Imports: Rcpp (>= 1.0.0),
   WaveletComp (>= 1.1),
   forecast (>= 8.9),
   lubridate(>= 1.7.4),
-  zoo (>= 1.8.6)
+  zoo (>= 1.8.6),
+  tseries(>= 0.10.47)
 Depends: data.table (>= 1.11.4)
 LinkingTo: Rcpp, RcppArmadillo
-RoxygenNote: 6.1.1
+RoxygenNote: 7.0.2

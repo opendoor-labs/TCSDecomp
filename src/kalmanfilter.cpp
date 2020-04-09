@@ -136,4 +136,6 @@ Rcpp::List kalman_smoother(const arma::mat B_tl, arma::mat B_tt, const arma::cub
 //package_native_routine_registration_skeleton("/Users/alexhubbard/Dropbox (Opendoor)/R Codes/Packages/TCSDecomp")
 //git config remote.origin.url git@github.com:opendoor-labs/TCSDecomp.git
 
-//sourceCpp("/Users/alexhubbard/Dropbox (Opendoor)/R Codes/Packages/kfdecomp/src/kalmanfilter.cpp")
+//sourceCpp("src/kalmanfilter.cpp")
+
+

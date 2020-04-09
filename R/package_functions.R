@@ -3,9 +3,9 @@
 #' yt = Ht * Bt + e_t
 #' Bt = Ft * B_{t-1} + u_t
 #'
-#' @param par Vector of named parameter values
+#' @param par Vector of named parameter values, includes the harmonics
 #' @param yt Univariate time series of data values
-#' @param freq Seasonality of the data (1, 4, 12, 52, 365)
+#' @param freq Frequency of the data (1 (yearly), 4 (quarterly), 12 (montly), 52 (weekly), 365 (daily))
 #' @param decomp Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")
 #' @param trend_spec Trend specification (NULL, "rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
 #' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
@@ -15,8 +15,8 @@
 #' tcs_ssm(par, y, freq, decomp, trend_spec, init)
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec = NULL, 
-                   init = NULL, model = NULL, full_seas_freq = T, seas_freqs = NULL){
+tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, 
+                   trend_spec = NULL, init = NULL, model = NULL){
   if(!is.null(model)){
     par = unlist(model$table[, grepl("coef_", colnames(model$table)), with = F])
     names(par) = gsub("coef_", "", names(par))
@@ -25,21 +25,6 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     trend_spec = model$table$model
     decomp = model$table$decomp
     full_seas_freq = model$table$full_seas_freq
-  }
-  
-  if(grepl("seasonal", decomp)){
-    if(is.null(seas_freqs)){
-      #Define the seasonal frequencies
-      if(full_seas_freq == T){
-        seas_freqs = 1:(floor(freq/2))
-      }else{
-        #s = j => j cycles per year
-        #month of year (s=1), half of year (s=2), quarter of year (s=4), 
-        #week of month (s=12), day of week (s=52)
-        seas_freqs = c(1, 2, 4, 12, 52)
-        seas_freqs = seas_freqs[round(freq/seas_freqs) > 0]
-      }
-    }
   }
   
   yt = matrix(yt, nrow = 1)
@@ -55,7 +40,7 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
   }
   
   #Define the transition and observation equation matrices based on the trend specification
-  if(trend_spec == "rw"){
+  if(trend_spec %in% c("rw", "stationary_1")){
     #T_t = T_{t-1} + e_t, e_t ~ N(0, sig_t^2)
     #Transition matrix
     Fm = matrix(c(1), nrow = 1, ncol = 1)
@@ -64,7 +49,11 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     #Observation matrix
     Hm = matrix(c(1), nrow = 1)
     colnames(Hm) = rownames(Fm)
-  }else if(trend_spec == "rwd"){
+    
+    if(trend_spec == "stationary_1"){
+      Fm["Tt0", "Tt1"] = par["ar1"]
+    }
+  }else if(trend_spec %in% c("rwd")){
     #T_t = M_{t-1} + T_{t-1} + e_t, e_t ~ N(0, sig_t^2)
     #M_t = M_{t-1} + n_t, n_t ~ N(0, sig_m^2)
     #Transition matrix
@@ -74,7 +63,7 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     #Observation matrix
     Hm = matrix(c(1, 0), nrow = 1)
     colnames(Hm) = rownames(Fm)
-  }else if(trend_spec == "2rw"){
+  }else if(trend_spec %in% c("2rw" | "stationary_2")){
     #T_t = 2T_{t-1} - T_{t-2} + e_t, e_t ~ N(0, sig_t^2)
     #Transition matrix
     Fm = rbind(c(2, -1), c(1, 0))
@@ -83,6 +72,10 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     #Observation matrix
     Hm = matrix(c(1, 0), nrow = 1)
     colnames(Hm) = rownames(Fm)
+    
+    if(trend_spec == "stationary_2"){
+      Fm["Tt0", c("Tt1", "Tt2")] = par[c("ar1", "ar2")]
+    }
   }
   
   #Get the parameters on exogenous data
@@ -129,7 +122,6 @@ tcs_ssm = function(par = NULL, yt = NULL, freq = NULL, decomp = NULL, trend_spec
     }
     Hm = cbind(Hm, matrix(rep(c(1, 0), length(jiter)), nrow = 1))
     colnames(Hm) = rownames(Fm)
-    Hm[, grepl("St", colnames(Hm)) & !grepl("Sts", colnames(Hm))] = abs(par[grepl("amp_s", names(par))])
     Qm = as.matrix(Matrix::bdiag(Qm, diag(unlist(lapply(jiter, function(j){rep(par[paste0("sig_s", j)], 2)})))))
     colnames(Qm) = rownames(Qm) = rownames(Fm)
   }
@@ -180,19 +172,63 @@ tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 10
   decomp = "trend"
   
   #Test for seasonality and long-term cycle
-  capture.output(wave <- WaveletComp::analyze.wavelet(data.frame(y), method = "ARIMA", n.sim = 500, verbose = F))
+  capture.output(wave <- WaveletComp::analyze.wavelet(data.frame(y), method = "ARIMA", n.sim = n.sim, verbose = F))
   wave = data.table::data.table(period = wave$Period, power = wave$Power.avg, pval = wave$Power.avg.pval)
   wave[, "period" := round(period)]
   wave = wave[, .(power = mean(power, na.rm = T), pval = mean(pval, na.rm = T)), by = "period"]
   wave[, "slope" := (shift(power, type = "lead", n = 1) - shift(power, type = "lag"))/(shift(period, type = "lead", n = 1) - shift(period, type = "lag", n = 1))]
   periods = wave[pval <= level, ][(shift(power, type = "lag", n = 1) <= power & shift(power, type = "lead", n = 1) <= power) & 
                                     (shift(sign(slope), type = "lag", n = 1) == 1 & shift(sign(slope), type = "lead", n = 1) == -1), ]$period
-  wave[, "Significant Frequencies" := ifelse(period %in% periods, T, F), ]
+  if(freq == 365.25){
+    temp = wave[pval <= level, ]
+    temp[, "weekly" := abs(period - 7)]
+    temp[, "monthly" := abs(period - 30)]
+    temp[, "yearly" := abs(period - 365)]
+    periods = unique(c(periods, temp[weekly <= 2, ][weekly == min(weekly), ]$period, 
+      temp[monthly <= 7, ][weekly == min(monthly), ]$period, 
+      temp[yearly <= 30, ][yearly == min(yearly), ]$period))
+    rm(temp)
+    wave[, "Significant Frequencies" := ifelse(period %in% periods, T, F), ]
+    periods[abs(periods - 365) <= 30 & which.min(abs(periods - 365))] = 365
+    periods[abs(periods - 30) <= 7 & which.min(abs(periods - 30))] = 30
+    periods[abs(periods - 7) <= 2 & which.min(abs(periods - 365))] = 7
+  }else if(freq == 365.25/7){
+    temp = wave[pval <= level, ]
+    temp[, "monthly" := abs(period - 4)]
+    temp[, "yearly" := abs(period - 52)]
+    periods = unique(periods, c(temp[monthly <= 1, ][weekly == min(monthly), ]$period, 
+                                temp[yearly <= 2, ][yearly == min(yearly), ]$period))
+    wave[, "Significant Frequencies" := ifelse(period %in% periods, T, F), ]
+    rm(temp)
+    periods[abs(periods - 52) <= 2 & which.min(abs(periods - 52))] = 52
+    periods[abs(periods - 4) <= 1 & which.min(abs(periods - 4))] = 4
+  }else if(freq == 12){
+    temp = wave[pval <= level, ]
+    temp[, "yearly" := abs(period - 12)]
+    periods = unique(periods, c(temp[yearly <= 2, ][yearly == min(yearly), ]$period))
+    wave[, "Significant Frequencies" := ifelse(period %in% periods, T, F), ]
+    rm(temp)
+    periods[abs(periods - 12) <= 2 & which.min(abs(periods - 12))] = 12
+  }else if(freq == 4){
+    temp = wave[pval <= level, ]
+    temp[, "yearly" := abs(period - 4)]
+    periods = unique(periods, c(temp[yearly <= 1, ][yearly == min(yearly), ]$period))
+    wave[, "Significant Frequencies" := ifelse(period %in% periods, T, F), ]
+    rm(temp)
+    periods[abs(periods - 4) <= 1 & which.min(abs(periods - 4))] = 4
+  }else if(freq == 1){
+    temp = wave[pval <= level, ]
+    temp[, "yearly" := abs(period - 1)]
+    periods = unique(periods, c(temp[yearly <= 1, ][yearly == min(yearly), ]$period))
+    wave[, "Significant Frequencies" := ifelse(period %in% periods, T, F), ]
+    rm(temp)
+    periods[abs(periods - 1) <= 1 & which.min(abs(periods - 1))] = 1
+  }
   
   if(length(periods) > 0){
     #Check for seasonality
     if(freq > 1){
-      if(any(abs(periods - freq) < freq/2) | seastests::wo(ts(y, frequency = freq))$stat == T){
+      if(any(abs(periods - freq) < freq/2) | suppressWarnings(seastests::wo(ts(y, frequency = freq))$stat == T)){
         decomp = paste0(decomp, "-seasonal")
       }
     }
@@ -208,7 +244,30 @@ tcs_detect_decomp = function(y, freq, level = 0.01, method = "ARIMA", n.sim = 10
     decomp = "trend-noise"
   }
   
-  return(list(wave = wave, decomp = decomp))
+  #Select the best trend specification
+  #Check for upward trend from the naive seasonal model
+  stl = stats::stl(ts(y, frequency = freq), s.window = "periodic", s.degree = 2, l.degree = 1, t.degree = 1)
+  lm.data = data.table::data.table(y = stl$time.series[, "trend"], t = 1:length(y))
+  lm = lm(y ~ t, lm.data)
+  
+  #Find the number of differences to make it stationary
+  ndiffs = forecast::ndiffs(stl$time.series[, "trend"], 
+                            type = ifelse(summary(lm)$coefficients["t", "Pr(>|t|)"] <= level, "trend", "level"), 
+                            test = "adf", alpha = level, max.d = 2)
+  if(ndiffs == 2){
+    trend_spec = "rwd"
+  }else if(ndiffs %in% c(0, 1)){
+    #Approximate stationary series using 
+    trend_spec = "rw"
+  }else if(ndiffs == 0){
+    arima = capture.output(summary(forecast::auto.arima(stl$time.series[, "trend"], d = 0, max.p = 2)))
+    ar = as.numeric(strsplit(gsub("ARIMA|\\(|\\)| ", "", arima[which(unlist(gregexpr("ARIMA", arima)) == 1)]), ",")[[1]][1])
+    trend_spec = paste0("stationary_", min(1, ar))
+  }else{
+    trend_spec = NULL
+  }
+  
+  return(list(wave = wave, decomp = decomp, periods = periods, trend_spec = trend_spec))
 }
 
 #' Detect frequency and dates from the data
@@ -237,7 +296,7 @@ tcs_detect_freq = function(y, freq = NULL){
     if(length(datecol) == 1) {
       datediffs = unique(diff(unlist(y[, c(datecol), with = F])))
       freq = datediffs[which.max(tabulate(match(diff(y[, c(datecol), with = F][[1]]), datediffs)))]
-      freq = c(365, 52, 12, 4, 1)[which.min(abs(freq -  c(1, 7, 30, 90, 365)))]
+      freq = c(365.25, 365.25/7, 12, 4, 1)[which.min(abs(freq -  c(1, 7, 365.25/12, 365.25/4, 365)))]
       dates = y[, c(datecol), with = F][[1]]
       if(is.yearmon == T){
         dates = as.yearmon(dates)
@@ -300,8 +359,8 @@ tcs_build_dates = function(y){
 #' e is the observation error
 #' @param y Univariate time series of data values. May also be a 2 column data frame containing a date column.
 #' @param exo Matrix of exogenous variables. Can be used to specify regression effects or other seasonal effects like holidays, etc.
-#' @param freq Seasonality of the data (1, 4, 12, 52, 365)
-#' #' @param full_seas_freq Whether to use the full range of seasonal frequencies or the default truncated case for higher frequency data
+#' @param freq Frequency of the data (1 (yearly), 4 (quarterly), 12 (monthly), 52 (weekly), 365 (daily)), default is NULL and will be automatically detected
+#' @param harmonics The seasonal harmonics to include, default is NULL which results in unique(1:floor(seasons/2))
 #' @param decomp Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")
 #' @param trend_spec Trend specification ("rw", "rwd", "2rw"). The default is NULL which will choose the best of all specifications based on the maximum likielhood. 
 #' "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.
@@ -313,6 +372,7 @@ tcs_build_dates = function(y){
 #' @param det_cycle Set thecycle error variance to 0 (deterministic cycle)
 #' @param det_drift Set the drift error variance to 0 (deterministic drift)
 #' @param maxit Maximum number of iterations for the optimization
+#' @param par Initial parameters, defalut is NULL
 #' @param wavelet.method Method for wavelet analysis comparison ("white.nose", "shuffle", "Fourier.rand", "AR", "ARIMA"). Default is "ARIMA".
 #' @param wavelet.sim Number of simulations for wavelet analysis. Default is 100
 #' @return List of estimation values including coefficients, convergence code, datea frequency, decomposition used, and trend specification selected.
@@ -330,16 +390,16 @@ tcs_build_dates = function(y){
 #' If det_cycle = T then the variance of the cyclce (sig_c) is set to 0 and is refreed to as a deterministic cycle
 #' @author Alex Hubbard (hubbard.alex@gmail.com)
 #' @export
-tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = T, decomp = NULL, trend_spec = NULL,
-                             multiplicative = F, par = NULL, seas_freqs = NULL, 
+tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spec = NULL,
+                             multiplicative = F, par = NULL, harmonics = NULL, 
                              det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
-                             wavelet.method = "ARIMA", wavelet.sim = 100, 
-                             level = 0.01, optim_methods = c("BFGS", "NM", "CG", "SANN"), maxit = 10000){
+                             wavelet.method = "ARIMA", wavelet.sim = 100, level = 0.01, 
+                             optim_methods = c("BFGS", "NM", "CG", "SANN"), maxit = 10000){
   if(level < 0.01 | level > 0.1){
     stop("level must be between 0.01 and 0.1.")
   }
   if(any(!optim_methods %in% c("NR", "BFGS", "BHHH", "SANN", "CG", "NM")) | length(optim_methods) < 1){
-    stop("optim_methods must be a vector of length 1 to 3 containing 'NR', 'BFGS', 'BHHH', 'SANN', 'CG', or 'NM'")
+    stop("optim_methods must be a vector containing 'NR', 'BFGS', 'BHHH', 'SANN', 'CG', and/or 'NM'")
   }
   if(!is.numeric(maxit)){
     stop("maxit must be numeric and greater than 0.")
@@ -371,184 +431,172 @@ tcs_decomp_estim = function (y, exo = NULL, freq = NULL, full_seas_freq = T, dec
     }
   }
   
-  #Set the decomposition
-  if(is.null(decomp)){
-    decomp = tcs_detect_decomp(y, freq, level, wavelet.method, wavelet.sim)
-    wave = decomp$wave
-    decomp = decomp$decomp
-  }else{
-    wave = NULL
-  }
-  
   #Standardize
   mean = mean(y, na.rm = T)
   sd = sd(y, na.rm = T)
   y = (y - mean)/sd
   
-  #Define the trend specifications to estiamte
-  if(is.null(trend_spec)) {
-    iter = c("rw", "rwd", "2rw")
-  }else {
-    if(!trend_spec %in% c("rw", "rwd", "2rw")){
-      stop("trend_spec must be 'rw', 'rwd', or '2rw'.")
-    }
-    iter = trend_spec
+  #Set the decomposition
+  if(is.null(decomp) | is.null(trend_spec)){
+    message("Detecting the appropriate decomposition...")
+    decomp = tcs_detect_decomp(y, freq, level, wavelet.method, wavelet.sim)
+    wave = decomp$wave
+    periods = decomp$periods
+    trend_spec = decomp$trend_spec
+    decomp = decomp$decomp
+    message("Done.")
+  }else{
+    wave = NULL
+    periods = NULL
   }
   
   #Get seasonal frequencies
   if(grepl("seasonal", decomp)){
-    if(is.null(seas_freqs)){
-      #Define the seasonal frequencies
-      if(full_seas_freq == T){
-        seas_freqs = 1:(floor(freq/2))
+    if(is.null(harmonics)){
+      if(is.null(periods)){
+        #Define the harmonics
+        harmonics = sort(unique(c(1:floor(12/2), #yearly
+                                  (1:floor(30/2))*12 #monthly, 
+                                  (1:floor(7/2))*52 #weekly
+                      )))
       }else{
-        #s = j => j cycles per year
-        #month of year (s=1), half of year (s=2), quarter of year (s=4), 
-        #week of month (s=12), day of week (s=52)
-        seas_freqs = c(1, 2, 4, 12, 52)
-        seas_freqs = seas_freqs[round(freq/seas_freqs) > 0]
+        harmonics = c()
+        if(1 %in% floor(freq/periods)){
+          harmonics = unique(c(harmonics, (1:floor(12/2))))
+        }
+        if(12 %in% floor(freq/periods)){
+          harmonics = unique(c(harmonics, (1:floor(30/2))*12))
+        }
+        if(52 %in% floor(freq/periods)){
+          harmonics = unique(c(harmonics, (1:floor(7/2))*52))
+        }
       }
+      harmonics = harmonics[round(freq/harmonics) > 0 & harmonics < freq]
     }
   }
+    
+  #Use naive seasonal model as the prior
+  stl = stats::stl(ts(y, frequency = freq), s.window = "periodic", s.degree = 2, l.degree = 1, t.degree = 1)
   
-  cl = parallel::makeCluster(min(c(parallel::detectCores(), length(iter))))
-  doSNOW::registerDoSNOW(cl)
-  invisible(snow::clusterCall(cl, function(x) .libPaths(x), .libPaths()))
-  `%fun%` = foreach::`%dopar%`
-  fit = foreach::foreach(i = iter, .combine = function(DT1, DT2){rbind(DT1, DT2, use.names = T, fill = T)},
-                         .packages = c("data.table", "Matrix", "maxLik", "imputeTS"), .export = c("tcs_ssm", "kalman_filter", "kalman_smoother")) %fun% {
-    
-    
-    #Naive model
-    stl = stats::stl(ts(y, frequency = freq), s.window = "periodic", s.degree = 2, l.degree = 1, t.degree = 1)
-    
-    #Set up the initial values
-    if(is.null(par)){
-      if(i %in% c("rw", "2rw")){
-        if(grepl("cycle", decomp)){
-          if(!is.null(wave)){
-            period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
-          }else{
-            period = 5*freq
-          }
-          par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/2, 
-                  lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), 
-                  sig_c = sd(diff(stl$time.series[, "trend"]))/2)
+  #Set up the initial values
+  if(is.null(par)){
+    if(trend_spec %in% c("rw", "2rw")){
+      if(grepl("cycle", decomp)){
+        if(!is.null(wave)){
+          period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
         }else{
-          par = c(sig_t = sd(diff(stl$time.series[, "trend"])))
+          period = 5*freq
         }
-      }else if(i %in% c("rwd")){
-        if(grepl("cycle", decomp)){
-          if(!is.null(wave)){
-            period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
-          }else{
-            period = 5*freq
-          }
-          par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/3, 
-                  sig_m = sd(diff(stl$time.series[, "trend"]))/3, 
-                  lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), 
-                  sig_c = sd(diff(stl$time.series[, "trend"]))/3)
+        par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/2, 
+                lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), 
+                sig_c = sd(diff(stl$time.series[, "trend"]))/2)
+      }else{
+        par = c(sig_t = sd(diff(stl$time.series[, "trend"])))
+      }
+    }else if(trend_spec == "rwd"){
+      if(grepl("cycle", decomp)){
+        if(!is.null(wave)){
+          period = mean(wave[`Significant Frequencies` == T, ][2:.N]$period)
         }else{
-          par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/2, 
-                  sig_m = sd(diff(stl$time.series[, "trend"]))/2)
+          period = 5*freq
         }
+        par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/3, 
+                sig_m = sd(diff(stl$time.series[, "trend"]))/3, 
+                lambda = log((2 * pi/(period))/(pi - 2 * pi/(period))), rho = log((0.5)/(1 - 0.5)), 
+                sig_c = sd(diff(stl$time.series[, "trend"]))/3)
+      }else{
+        par = c(sig_t = sd(diff(stl$time.series[, "trend"]))/2, 
+                sig_m = sd(diff(stl$time.series[, "trend"]))/2)
       }
-      if(grepl("seasonal", decomp)){
-        par = c(par, sig_s = unname(rep(sd(diff(stl$time.series[, "seasonal"]))/length(seas_freqs), length(seas_freqs))))
-        names(par)[grepl("sig_s", names(par))] = paste0("sig_s", seas_freqs)
-        par = c(par, amp_s = rep(1, length(seas_freqs)))
-        names(par)[grepl("amp_s", names(par))] = paste0("amp_s", seas_freqs)
-      }
-      par = c(par, sig_e = sd(stl$time.series[, "remainder"]))
+    }else if(trend_spec == "stationary_1"){
+      par = c(par, ar1 = 0.75)
+    }else if(trend_spec == "stationary_2"){
+      par = c(par, ar1 = 1.25, ar2 = -0.5)
     }
-    
-    #Set any fixed parameters
-    fixed = NULL
-    if(det_obs == T){
-      par["sig_e"] = 0
-      fixed = c(fixed, "sig_e")
+    if(grepl("seasonal", decomp)){
+      par = c(par, sig_s = unname(rep(sd(diff(stl$time.series[, "seasonal"]))/length(harmonics), length(harmonics))))
+      names(par)[grepl("sig_s", names(par))] = paste0("sig_s", harmonics)
     }
-    if(det_trend == T){
-      par["sig_t"] = 0
-      fixed = c(fixed, "sig_t")
-    }
-    if(det_seas == T){
-      par[grepl("sig_s", names(par))] = 0
-      fixed = c(fixed, names(par)[grepl("sig_s", names(par))])
-    }
-    if(det_cycle == T){
-      par["sig_c"] = 0
-      fixed = c(fixed, "sig_c")
-    }
-    if(det_drift == T){
-      par["sig_m"] = 0
-      fixed = c(fixed, "sig_m")
-    }
-    if(is.null(exo)){
-      X = t(matrix(0, nrow = length(y), ncol = 1))
-      rownames(X) = "X"
-      par = c(par, beta_X = 0)
-      fixed = c(fixed, "beta_X")
-    }else{
-      X = t(exo)
-      par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
-    }
-    
-    #Define the objective function
-    objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
-      yt = matrix(get("y"), nrow = 1)
-      sp = tcs_ssm(par = par, yt = yt, freq = freq, decomp = decomp, seas_freqs = seas_freqs,
-                   trend_spec = trend_spec, init = init, full_seas_freq = full_seas_freq)
-      ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
+    par = c(par, sig_e = sd(stl$time.series[, "remainder"]))
+  }
+  
+  #Set any fixed parameters
+  fixed = NULL
+  if(det_obs == T){
+    par["sig_e"] = 0
+    fixed = c(fixed, "sig_e")
+  }
+  if(det_trend == T){
+    par["sig_t"] = 0
+    fixed = c(fixed, "sig_t")
+  }
+  if(det_seas == T){
+    par[grepl("sig_s", names(par))] = 0
+    fixed = c(fixed, names(par)[grepl("sig_s", names(par))])
+  }
+  if(det_cycle == T){
+    par["sig_c"] = 0
+    fixed = c(fixed, "sig_c")
+  }
+  if(det_drift == T){
+    par["sig_m"] = 0
+    fixed = c(fixed, "sig_m")
+  }
+  if(is.null(exo)){
+    X = t(matrix(0, nrow = length(y), ncol = 1))
+    rownames(X) = "X"
+    par = c(par, beta_X = 0)
+    fixed = c(fixed, "beta_X")
+  }else{
+    X = t(exo)
+    par = c(par, beta_ = coef(lm(y ~ . - 1, data = data.frame(cbind(y, exo)))))
+  }
+  
+  #Define the objective function
+  objective = function(par, na_locs, freq, decomp, trend_spec, init = NULL){
+    yt = matrix(get("y"), nrow = 1)
+    sp = tcs_ssm(par = par, yt = yt, freq = freq, decomp = decomp, trend_spec = trend_spec, init = init)
+    ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
+                        yt = yt, X = X, beta = sp$beta)
+    if(!is.null(na_locs)) {
+      fc = sp$Ht %*% ans$B_tt
+      yt[, na_locs] = fc[, na_locs]
+      ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                           yt = yt, X = X, beta = sp$beta)
-      if(!is.null(na_locs)) {
-        fc = sp$Ht %*% ans$B_tt
-        yt[, na_locs] = fc[, na_locs]
-        ans = kalman_filter(matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
-                            yt = yt, X = X, beta = sp$beta)
-        assign("y", c(yt), .GlobalEnv)
-      }
-      return(ans$loglik)
+      assign("y", c(yt), .GlobalEnv)
     }
-    
-    #Find anhy na values
-    if(any(is.na(y))){
-      na_locs = which(is.na(y))
-    }else{
-      na_locs = NULL
-    }
-    
-    #Estimate the model
-    for(o in optim_methods){
-      out = tryCatch(maxLik::maxLik(logLik = objective, 
-                                    start = par, method = o, fixed = fixed, 
-                                    finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = NULL, na_locs = na_locs, 
-                                    freq = freq, decomp = decomp, trend_spec = i), 
-                     error = function(err){NULL})
-      if(!is.null(out)){
-        break
-      }
-    }
-    suppressWarnings(rm(init, init2, o))
-    gc()
-    
+    return(ans$loglik)
+  }
+  
+  #Find anhy na values
+  if(any(is.na(y))){
+    na_locs = which(is.na(y))
+  }else{
+    na_locs = NULL
+  }
+  
+  #Estimate the model
+  for(o in optim_methods){
+    out = tryCatch(maxLik::maxLik(logLik = objective, 
+                                  start = par, method = o, fixed = fixed, 
+                                  finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = NULL, na_locs = na_locs, 
+                                  freq = freq, decomp = decomp, trend_spec = i), 
+                   error = function(err){NULL})
     if(!is.null(out)){
-      #Retreive the model output
-      ret = data.table::data.table(model = i, freq = freq, full_seas_freq = full_seas_freq, seas_freqs = paste(seas_freqs, collapse = ", "), 
-                                   decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
-                                   matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
-      if(is.null(exo)){
-        ret[, colnames(ret)[grepl("beta_", colnames(ret))] := NULL]
-      }
-      return(ret)
-    }else{
-      return(NULL)
+      break
     }
   }
-  snow::stopCluster(cl)
+  suppressWarnings(rm(init, init2, o))
+  gc()
+  message("Done.")
   
-  #Select the best model based on the maximum likelihood
-  fit = list(table = fit[loglik == max(loglik, na.rm = T), ], data = y*sd + mean, dates = dates)
+  #Retreive the model output
+  fit = data.table::data.table(model = i, freq = freq, harmonics = paste(harmonics, collapse = ", "), 
+                               decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
+                               matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
+  if(is.null(exo)){
+    fit[, colnames(ret)[grepl("beta_", colnames(ret))] := NULL]
+  }
   if(multiplicative == T){
     fit$data = exp(fit$data)
   }
@@ -628,8 +676,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   }
   decomp = model$table$decomp
   trend_spec = model$table$model
-  full_seas_freq = model$table$full_seas_freq
-  seas_freqs = as.numeric(strsplit(model$table$seas_freqs, ", ")[[1]])
+  harmonics = as.numeric(strsplit(model$table$harmonics, ", ")[[1]])
   
   #Get the coefficients
   cs = unlist(model$table[, grepl("coef_", colnames(model$table)), with = F])
@@ -637,12 +684,13 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
   names(cs) = gsub("coef_", "", names(cs))
   
   #Filter the data
-  sp = tcs_ssm(par = cs, yt = y, freq = freq, decomp = decomp, trend_spec = trend_spec, full_seas_freq = full_seas_freq, seas_freqs = seas_freqs)
+  message("Filtering the data...")
+  sp = tcs_ssm(par = cs, yt = y, freq = freq, decomp = decomp, trend_spec = trend_spec)
   init = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                        yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
   init = kalman_smoother(B_tl = init$B_tl, B_tt = init$B_tt, P_tl = init$P_tl, P_tt = init$P_tt, Ft = sp$Ft)
   init = list(B0 = init[["B_tt"]][, 1], P0 = init[["P_tt"]][, , 1])
-  sp = tcs_ssm(par = cs, yt = y, freq = freq, decomp = decomp, trend_spec = trend_spec, init = init, full_seas_freq = full_seas_freq, seas_freqs = seas_freqs)
+  sp = tcs_ssm(par = cs, yt = y, freq = freq, decomp = decomp, trend_spec = trend_spec, init = init)
   ans = kalman_filter(B0 = matrix(sp$B0, ncol = 1), P0 = sp$P0, Dt = sp$Dt, At = sp$At, Ft = sp$Ft, Ht = sp$Ht, Qt = sp$Qt, Rt = sp$Rt, 
                       yt = matrix(y, nrow = 1), X = X, beta = sp$beta)
   if(!is.null(na_locs)){
@@ -692,47 +740,77 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     if(any(grepl("St", rownames(errors)))){
       seasonal = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% B_tt[grepl("St", rownames(B_tt)), ])
       seasonal_error = c(sp$Ht[grepl("St", colnames(sp$Ht))] %*% errors[grepl("St", rownames(errors)), ])
+    
+      #Define special harmonics
+      weekly_harmonics = paste0("St", c((1:floor(7/2))*52))
+      monthly_harmonics = paste0("St", c((1:floor(30/2))*12))
+      monthly_harmonics = monthly_harmonics[!monthly_harmonics %in% weekly_harmonics]
+      yearly_harmonics = paste0("St", c(1:floor(12/2)))
+      yearly_harmonics = yearly_harmonics[!yearly_harmonics %in% c(weekly_harmonics, monthly_harmonics)]
+      other_harmonics = paste0("St", harmonics)[!paste0("St", harmonics) %in% c(weekly_harmonics, monthly_harmonics, yearly_harmonics)]
       
-      seasonalities = t(matrix(B_tt[grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt)), ], 
-                        nrow = length(which(grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt)))), 
+      #Calcualte grouped seasonalities
+      weekly_seas = rowSums(t(matrix(B_tt[rownames(B_tt) %in% weekly_harmonics, ], 
+                        nrow = length(which(rownames(B_tt) %in% weekly_harmonics)), 
                         ncol = ncol(B_tt), 
-                        dimnames = list(rownames(B_tt)[grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt))], NULL)))
-      colnames(seasonalities)[colnames(seasonalities) == "St1"] = "yearly_seas"
-      colnames(seasonalities)[colnames(seasonalities) == "St2"] = "semiyearly_seas"
-      colnames(seasonalities)[colnames(seasonalities) == "St4"] = "quarterly_seas"
-      colnames(seasonalities)[colnames(seasonalities) == "St12"] = "monthly_seas"
-      colnames(seasonalities)[colnames(seasonalities) == "St52"] = "weekly_seas"
-      colnames(seasonalities)[grepl("St", colnames(seasonalities))] = 
-        paste0(colnames(seasonalities)[grepl("St", colnames(seasonalities))], "_seas")
-      
-      seasonality_errors = t(matrix(errors[grepl("St", rownames(errors)) & !grepl("Sts", rownames(errors)), ], 
-                                    nrow = length(which(grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt)))), 
+                        dimnames = list(rownames(B_tt)[rownames(B_tt) %in% weekly_harmonics], NULL))))
+      monthly_seas = rowSums(t(matrix(B_tt[rownames(B_tt) %in% monthly_harmonics, ], 
+                                     nrow = length(which(rownames(B_tt) %in% monthly_harmonics)), 
+                                     ncol = ncol(B_tt), 
+                                     dimnames = list(rownames(B_tt)[rownames(B_tt) %in% monthly_harmonics], NULL))))
+      yearly_seas = rowSums(t(matrix(B_tt[rownames(B_tt) %in% yearly_harmonics, ], 
+                                      nrow = length(which(rownames(B_tt) %in% yearly_harmonics)), 
+                                      ncol = ncol(B_tt), 
+                                      dimnames = list(rownames(B_tt)[rownames(B_tt) %in% yearly_harmonics], NULL))))
+      other_seas = rowSums(t(matrix(B_tt[rownames(B_tt) %in% other_harmonics, ], 
+                                    nrow = length(which(rownames(B_tt) %in% other_harmonics)), 
                                     ncol = ncol(B_tt), 
-                                    dimnames = list(rownames(B_tt)[grepl("St", rownames(B_tt)) & !grepl("Sts", rownames(B_tt))], NULL)))
-      colnames(seasonality_errors) = paste0(colnames(seasonalities), "_error")
+                                    dimnames = list(rownames(B_tt)[rownames(B_tt) %in% other_harmonics], NULL))))
+      seasonal = cbind(seasonal, yearly_seas, monthly_seas, weekly_seas, other_seas)
+      rm(weekly_seas, monthly_seas, yearly_seas, other_seas)
+      
+      #Calculate grouped seasonal errors
+      weekly_seas_error = rowSums(t(matrix(errors[rownames(errors) %in% weekly_harmonics, ], 
+                                     nrow = length(which(rownames(errors) %in% weekly_harmonics)), 
+                                     ncol = ncol(errors), 
+                                     dimnames = list(rownames(errors)[rownames(errors) %in% weekly_harmonics], NULL))))
+      monthly_seas_error = rowSums(t(matrix(errors[rownames(errors) %in% monthly_harmonics, ], 
+                                      nrow = length(which(rownames(errors) %in% monthly_harmonics)), 
+                                      ncol = ncol(errors), 
+                                      dimnames = list(rownames(errors)[rownames(errors) %in% monthly_harmonics], NULL))))
+      yearly_seas_error = rowSums(t(matrix(errors[rownames(errors) %in% yearly_harmonics, ], 
+                                     nrow = length(which(rownames(errors) %in% yearly_harmonics)), 
+                                     ncol = ncol(errors), 
+                                     dimnames = list(rownames(errors)[rownames(errors) %in% yearly_harmonics], NULL))))
+      other_seas_error = rowSums(t(matrix(errors[rownames(errors) %in% other_harmonics, ], 
+                                    nrow = length(which(rownames(errors) %in% other_harmonics)), 
+                                    ncol = ncol(errors), 
+                                    dimnames = list(rownames(errors)[rownames(errors) %in% other_harmonics], NULL))))
+      seasonal_error = cbind(seasonal_error, yearly_seas_error, monthly_seas_error, weekly_seas_error, other_seas_error)
     }else{
       seasonal = rep(0, nrow(series))
       seasonal_error = rep(0, ncol(errors))
-      seasonalities = rep(0, nrow(series))
-      seasonality_errors = rep(0, nrow(series))
     }
     
     #Get the observation and total errors
     observation_error = y - c(sp$Ht %*% t(as.matrix(series)))
-    total_error = trend_error + cycle_error + seasonal_error + observation_error
+    total_error = trend_error + cycle_error + seasonal_error[, "seasonal_error"] + observation_error
     
     #Combine the filtered series
-    toret = data.table::data.table(y = y, trend = trend, cycle = cycle, seasonal = seasonal, seasonalities, 
+    toret = data.table::data.table(y = y, trend = trend, cycle = cycle, seasonal = seasonal,
                                    trend_error = trend_error, cycle_error = cycle_error, 
-                                   seasonal_error = seasonal_error,  seasonality_errors, 
+                                   seasonal_error = seasonal_error, 
                                    observation_error = observation_error, total_error = total_error)
+    colnames(toret)[grepl("seasonal\\.", colnames(toret))] = gsub("seasonal\\.", "", colnames(toret)[grepl("seasonal\\.", colnames(toret))])
+    colnames(toret)[grepl("seasonal_error\\.", colnames(toret))] = gsub("seasonal_error\\.", "", colnames(toret)[grepl("seasonal_error\\.", colnames(toret))])
+    rm(trend, cycle, seasonal, trend_error, cycle_error, seasonal_error, observation_error, total_error)
     
     #Filter out the errors 
-    toret[, `:=`("trend_pred", trend - trend_error)]
-    toret[, `:=`("cycle_pred", cycle - cycle_error)]
-    toret[, `:=`("seasonal_pred", seasonal - seasonal_error)]
+    toret[, `:=`("trend_adj_noise", trend - trend_error)]
+    toret[, `:=`("cycle_adj_noise", cycle - cycle_error)]
+    toret[, `:=`("seasonal_adj_noise", seasonal - seasonal_error)]
     for(j in colnames(toret)[grepl("_seas", colnames(toret)) & !grepl("_error", colnames(toret))]){
-      toret[, `:=` (paste0(j, "_pred"), eval(parse(text = j)) - eval(parse(text = paste0(j, "_error"))))]
+      toret[, `:=` (paste0(j, "_adj_noise"), eval(parse(text = j)) - eval(parse(text = paste0(j, "_error"))))]
     }
     
     #Calculate adusted series
@@ -741,10 +819,10 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     toret[, `:=`("seasonal_cycle_adjusted", y - seasonal - cycle)]
     
     #Calculate adusted series
-    toret[, `:=`("seasonal_noise_adjusted", trend_pred + cycle_pred)]
-    toret[, `:=`("cycle_noise_adjusted",  trend_pred + seasonal_pred)]
-    toret[, `:=`("seasonal_cycle_noise_adjusted", trend_pred)]
-    toret[, `:=`("noise_adjusted", trend_pred + seasonal_pred + cycle_pred)]
+    toret[, `:=`("seasonal_noise_adjusted", y - seasonal - total_error)]
+    toret[, `:=`("cycle_noise_adjusted",  y - cycle - total_error)]
+    toret[, `:=`("seasonal_cycle_noise_adjusted", y - cycle - seasonal - total_error)]
+    toret[, `:=`("noise_adjusted", y - total_error)]
     
     if(!is.null(exo) | !all(is.na(model$exo))){
       XB = do.call("cbind", lapply(names(cs)[grepl("beta_", names(cs))], function(x){
@@ -762,12 +840,11 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
                 data.table(method = "smooth", date = dates, preret[["smooth"]]), 
                 use.names = T, fill = T)[, "date" := as.Date(date)]
 
-  cols = colnames(final)[colnames(final) %in% c("y", "trend", "trend_pred", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted", 
-                                                "seasonal_noise_adjusted", "cycle_noise_adjusted", "seasonal_cycle_noise_adjusted", 
-                                                "noise_adjusted")]
+  cols = colnames(final)[colnames(final) %in% c("y", "trend", "trend_adj_noise", "seasonal_adjusted", "cycle_adjusted", "seasonal_cycle_adjusted", 
+                                                "seasonal_adj_noise", "cycle_adj_noise", "seasonal_cycle_noise_adjusted", "noise_adjusted")]
   final[, c(cols) := lapply(.SD, function(x){x*y_sd + y_mean}), .SDcols = c(cols), by = "method"]
-  cols = colnames(final)[colnames(final) %in% c("seasonal", "seasonal_pred", "cycle", "cycle_pred", "seasonal_cycle",
-                                                colnames(final)[grepl("_seas|_seas_err|_seas_pred", colnames(final))],
+  cols = colnames(final)[colnames(final) %in% c("seasonal", "seasonal_pred", "cycle", "cycle_adj_noise", "seasonal_cycle",
+                                                colnames(final)[grepl("_seas|_seas_err|_seas_adj_noise", colnames(final))],
            "trend_error", "cycle_error", "seasonal_error", "observation_error", "total_error", rownames(X))]
   final[,  c(cols) := lapply(.SD, function(x){x*y_sd}), .SDcols = c(cols), by = "method"]
   
@@ -775,6 +852,7 @@ tcs_decomp_filter = function(model, y = NULL, exo = NULL, plot = F){
     final[, c(colnames(final)[!colnames(final) %in% c("method", "date")]) := lapply(.SD, exp),
           .SDcols = c(colnames(final)[!colnames(final) %in% c("method", "date")])]
   }
+  message("Done.")
   
   if(plot == T) {
     for(i in c("filter", "smooth")){

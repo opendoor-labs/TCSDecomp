@@ -4,19 +4,33 @@
 \alias{tcs_decomp_estim}
 \title{Trend cycle seasonal decomposition using the Kalman filter.}
 \usage{
-tcs_decomp_estim(y, exo = NULL, freq = NULL, full_seas_freq = F,
-  decomp = NULL, trend_spec = NULL, multiplicative = F,
-  det_obs = F, det_trend = F, det_seas = F, det_cycle = F,
-  det_drift = F, wavelet.method = "ARIMA", wavelet.sim = 100,
-  level = 0.01, optim_methods = c("BFGS", "CG", "NM"), maxit = 10000)
+tcs_decomp_estim(
+  y,
+  exo = NULL,
+  freq = NULL,
+  decomp = NULL,
+  trend_spec = NULL,
+  multiplicative = F,
+  par = NULL,
+  harmonics = NULL,
+  det_obs = F,
+  det_trend = F,
+  det_seas = F,
+  det_cycle = F,
+  det_drift = F,
+  wavelet.method = "ARIMA",
+  wavelet.sim = 100,
+  level = 0.01,
+  optim_methods = c("BFGS", "NM", "CG", "SANN"),
+  maxit = 10000
+)
 }
 \arguments{
 \item{y}{Univariate time series of data values. May also be a 2 column data frame containing a date column.}
 
 \item{exo}{Matrix of exogenous variables. Can be used to specify regression effects or other seasonal effects like holidays, etc.}
 
-\item{freq}{Seasonality of the data (1, 4, 12, 52, 365)
-#' @param full_seas_freq Whether to use the full range of seasonal frequencies or the default truncated case for higher frequency data}
+\item{freq}{Frequency of the data (1 (yearly), 4 (quarterly), 12 (monthly), 52 (weekly), 365 (daily)), default is NULL and will be automatically detected}
 
 \item{decomp}{Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")}
 
@@ -24,6 +38,10 @@ tcs_decomp_estim(y, exo = NULL, freq = NULL, full_seas_freq = F,
 "rw" is the random walk trend. "rwd" is the random walk with random walk drift trend. "2rw" is a 2nd order random walk trend.}
 
 \item{multiplicative}{If data should be logged to create a multiplicative model}
+
+\item{par}{Initial parameters, defalut is NULL}
+
+\item{harmonics}{The seasonal harmonics to include, default is NULL which results in unique(1:floor(seasons/2))}
 
 \item{det_obs}{Set the observation equation error variance to 0 (deterministic observation equation)}
 

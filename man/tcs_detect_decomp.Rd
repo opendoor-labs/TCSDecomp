@@ -4,8 +4,7 @@
 \alias{tcs_detect_decomp}
 \title{Detect cycle and seasonality from the data}
 \usage{
-tcs_detect_decomp(y, freq, level = 0.01, method = "ARIMA",
-  n.sim = 100)
+tcs_detect_decomp(y, freq, level = 0.01, method = "ARIMA", n.sim = 100)
 }
 \arguments{
 \item{y}{Univariate time series of data values. May also be a 2 column data frame containing a date column.}

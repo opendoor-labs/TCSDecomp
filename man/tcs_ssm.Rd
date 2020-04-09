@@ -7,15 +7,22 @@ Creates a state space model in list form
 yt = Ht * Bt + e_t
 Bt = Ft * B_{t-1} + u_t}
 \usage{
-tcs_ssm(par = NULL, yt = NULL, freq = NULL, decomp = NULL,
-  trend_spec = NULL, init = NULL, model = NULL, full_seas_freq = F)
+tcs_ssm(
+  par = NULL,
+  yt = NULL,
+  freq = NULL,
+  decomp = NULL,
+  trend_spec = NULL,
+  init = NULL,
+  model = NULL
+)
 }
 \arguments{
-\item{par}{Vector of named parameter values}
+\item{par}{Vector of named parameter values, includes the harmonics}
 
 \item{yt}{Univariate time series of data values}
 
-\item{freq}{Seasonality of the data (1, 4, 12, 52, 365)}
+\item{freq}{Frequency of the data (1 (yearly), 4 (quarterly), 12 (montly), 52 (weekly), 365 (daily))}
 
 \item{decomp}{Decomposition model ("tend-cycle-seasonal", "trend-seasonal", "trend-cycle", "trend-noise")}
 
