@@ -596,7 +596,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
                                decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
                                matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
   if(is.null(exo)){
-    fit[, colnames(ret)[grepl("beta_", colnames(ret))] := NULL]
+    fit[, colnames(fit)[grepl("beta_", colnames(fit))] := NULL]
   }
   if(multiplicative == T){
     fit$data = exp(fit$data)
