@@ -394,7 +394,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
                              multiplicative = F, par = NULL, harmonics = NULL, 
                              det_obs = F, det_trend = F, det_seas = F, det_cycle = F, det_drift = F,
                              wavelet.method = "ARIMA", wavelet.sim = 100, level = 0.01, 
-                             optim_methods = c("BFGS", "NM", "CG", "SANN"), maxit = 10000){
+                             optim_methods = c("BFGS", "NM", "CG", "SANN"), maxit = 10000, verbose = F){
   if(level < 0.01 | level > 0.1){
     stop("level must be between 0.01 and 0.1.")
   }
@@ -579,7 +579,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
   for(o in optim_methods){
     out = tryCatch(maxLik::maxLik(logLik = objective, 
                                   start = par, method = o, fixed = fixed, 
-                                  finalHessian = F, hess = NULL, control = list(printLevel = 2, iterlim = maxit), init = NULL, na_locs = na_locs, 
+                                  finalHessian = F, hess = NULL, control = list(printLevel = ifelse(verbose == T, 2, 0), iterlim = maxit), init = NULL, na_locs = na_locs, 
                                   freq = freq, decomp = decomp, trend_spec = trend_spec), 
                    error = function(err){NULL})
     if(!is.null(out)){
@@ -591,7 +591,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
   message("Done.")
   
   #Retreive the model output
-  fit = data.table::data.table(model = i, freq = freq, harmonics = paste(harmonics, collapse = ", "), 
+  fit = data.table::data.table(model = trend_spec, freq = freq, harmonics = paste(harmonics, collapse = ", "), 
                                decomp = decomp, multiplicative = multiplicative, convergence = out$code, loglik = out$maximum,
                                matrix(coef(out), nrow = 1, dimnames = list(NULL, paste0("coef_", names(coef(out))))))
   if(is.null(exo)){
