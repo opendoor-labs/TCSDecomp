@@ -426,7 +426,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
     lm.data = data.table::data.table(y = y, t = 1:length(y))
     lm = lm(y ~ t, data = lm.data)
     if(all(y > 1) & summary(lm)$coefficients["t", "Pr(>|t|)"] <= level){
-      multiplicative == T
+      multiplicative = T
     }else{
       multiplicative = F
     }
