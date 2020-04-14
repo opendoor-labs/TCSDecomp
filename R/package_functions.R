@@ -465,7 +465,7 @@ tcs_decomp_estim = function(y, exo = NULL, freq = NULL, decomp = NULL, trend_spe
       if(is.null(periods)){
         #Define the harmonics
         harmonics = sort(unique(c(1:floor(12/2), #yearly
-                                  (1:floor(30/2))*12 #monthly, 
+                                  (1:floor(30/2))*12, #monthly, 
                                   (1:floor(7/2))*52 #weekly
                       )))
       }else{
